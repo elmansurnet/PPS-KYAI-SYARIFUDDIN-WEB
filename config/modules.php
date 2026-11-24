@@ -7,7 +7,7 @@
  */
 return [
     'enabled' => [
-        //
+        \Modules\Landing\Providers\LandingServiceProvider::class,
     ],
 
     /*

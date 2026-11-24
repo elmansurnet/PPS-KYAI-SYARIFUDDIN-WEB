@@ -40,10 +40,14 @@ test('latest news provider is bound to an empty implementation', function () {
     expect(app(LatestNewsProvider::class)->latest(3))->toBeEmpty();
 });
 
-test('registered filament plugins is empty when modules declare none', function () {
+test('a module that declares no filament plugin adds none', function () {
+    $core = app()->getProvider(CoreServiceProvider::class);
+    $classes = fn () => array_map(fn ($plugin) => $plugin::class, $core->registeredFilamentPlugins());
+    $before = $classes();
+
     enableModules([DummyServiceProvider::class]);
 
-    expect(app()->getProvider(CoreServiceProvider::class)->registeredFilamentPlugins())->toBe([]);
+    expect($classes())->toBe($before);
 });
 
 test('module routes run inside the web middleware group', function () {
