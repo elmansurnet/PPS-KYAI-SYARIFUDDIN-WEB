@@ -22,6 +22,8 @@ class RoleSeeder extends Seeder
     private const CORE_PERMISSIONS = [
         'ViewAny:User', 'View:User', 'Create:User', 'Update:User', 'Delete:User', 'DeleteAny:User',
         'ViewAny:Role', 'View:Role', 'Create:Role', 'Update:Role', 'Delete:Role',
+        // Izin halaman (bukan sumber daya): pengaturan situs.
+        'Manage:SiteSettings',
     ];
 
     public function run(): void
