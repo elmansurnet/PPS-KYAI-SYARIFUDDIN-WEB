@@ -24,7 +24,7 @@
     @endif
     <meta name="theme-color" content="#ffffff">
     <link rel="preload" href="{{ asset('fonts/figtree/figtree-latin-wght-normal.woff2') }}" as="font" type="font/woff2" crossorigin>
-    <link rel="preload" href="{{ asset('fonts/fraunces/fraunces-latin-full-normal.woff2') }}" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="{{ asset('fonts/fraunces/fraunces-latin-wght-normal.woff2') }}" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="{{ asset('fonts/fonts.css') }}?v={{ @filemtime(public_path('fonts/fonts.css')) }}">
     @vite('resources/css/app.css')
     {{ $head ?? '' }}

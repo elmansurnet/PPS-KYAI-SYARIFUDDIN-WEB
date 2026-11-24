@@ -149,7 +149,7 @@ test('test_logo_fallback_shows_monogram_when_logo_path_empty', function () {
         ->not->toContain('data-logo="image"');
 });
 
-test('test_logo_renders_img_with_alt_when_logo_path_set', function () {
+test('test_logo_renders_decorative_img_beside_visible_site_name_when_logo_path_set', function () {
     $this->withoutVite();
     layoutSettings(['logo_path' => 'site/logo.png']);
 
@@ -157,7 +157,10 @@ test('test_logo_renders_img_with_alt_when_logo_path_set', function () {
 
     expect($html)
         ->toContain('data-logo="image"')
-        ->toMatch('~<img[^>]+src="[^"]*/storage/site/logo\.png"[^>]+alt="Logo PPs Kyai Syarifuddin"~')
+        ->toMatch('~<img[^>]+src="[^"]*/storage/site/logo\.png"[^>]+alt=""~')
+        ->toMatch('~data-logo="image"[^>]*>\s*<span[^>]*>PPs Kyai Syarifuddin</span>~')
+        ->not->toContain('alt="Logo')
+        ->not->toMatch('~<img[^>]+(width|height)=~')
         ->not->toContain('data-logo="monogram"');
 });
 
@@ -235,4 +238,61 @@ test('test_whatsapp_number_is_displayed_readably', function () {
     expect(WhatsAppLink::display('0812-3456-7890'))->toBe('+62 812-3456-7890');
     expect(WhatsAppLink::display('+62 21 555'))->toBe('+62 215-55');
     expect(WhatsAppLink::display(''))->toBe('');
+});
+
+test('test_button_href_only_allows_safe_schemes', function (string $href, string $expected) {
+    $html = Blade::render('<x-button :href="$href">Tautan</x-button>', ['href' => $href]);
+
+    expect($html)->toContain('href="'.e($expected).'"');
+})->with([
+    'javascript' => ['javascript:alert(1)', '#'],
+    'javascript berkapital dan spasi' => ['  JaVaScRiPt:alert(1)', '#'],
+    'data' => ['data:text/html;base64,PHNjcmlwdD4=', '#'],
+    'protokol-relatif' => ['//evil.test/x', '#'],
+    'backslash' => ['/\evil.test', '#'],
+    'relatif polos' => ['berita', '#'],
+    'path situs' => ['/daftar', '/daftar'],
+    'anchor' => ['#konten', '#konten'],
+    'https' => ['https://contoh.test/a?b=1', 'https://contoh.test/a?b=1'],
+    'http' => ['http://localhost/berita', 'http://localhost/berita'],
+    'mailto' => ['mailto:info@pps.test', 'mailto:info@pps.test'],
+    'tel' => ['tel:+6281234567890', 'tel:+6281234567890'],
+]);
+
+test('test_mobile_menu_has_no_popover_fallback', function () {
+    $this->withoutVite();
+
+    $html = $this->get('/__layout-probe')->getContent();
+
+    // Fallback: tautan navigasi sebaris (tanpa popover) ikut dirender untuk peramban lama.
+    preg_match('~<nav[^>]*class="nav-fallback[^"]*"[^>]*>(.*?)</nav>~s', $html, $fallback);
+    expect($fallback)->not->toBeEmpty();
+    expect($fallback[1])
+        ->toContain('href="'.url('/').'"')
+        ->toContain('href="'.url('/berita').'"')
+        ->toContain('href="'.url('/daftar').'"');
+    expect($html)->toMatch('~<button[^>]*popovertarget="menu-utama"[^>]*class="menu-toggle ~');
+
+    // CSS sumber dan hasil build: bawaan = fallback (toggle/panel tersembunyi, nav sebaris),
+    // popover hanya opt-in di dalam @supports selector(:popover-open).
+    $manifest = json_decode(file_get_contents(public_path('build/manifest.json')), true);
+    $built = file_get_contents(public_path('build/'.$manifest['resources/css/app.css']['file']));
+    $source = file_get_contents(resource_path('css/app.css'));
+
+    foreach ([$source, $built] as $css) {
+        $css = preg_replace('~/\*.*?\*/~s', '', $css);
+        $supports = strpos($css, '@supports selector(:popover-open)');
+        expect($supports)->not->toBeFalse();
+
+        $before = substr($css, 0, $supports);
+        expect($before)
+            ->toMatch('~\.menu-toggle\s*,\s*\.drawer\s*\{\s*display:\s*none~')
+            ->toMatch('~\.nav-fallback\s*\{\s*display:\s*block~');
+
+        $inside = substr($css, $supports, 400);
+        expect($inside)
+            ->toMatch('~\.menu-toggle\s*\{\s*display:\s*inline-flex~')
+            ->toMatch('~\.nav-fallback\s*\{\s*display:\s*none~')
+            ->toMatch('~\.drawer:popover-open\s*\{\s*display:\s*block~');
+    }
 });

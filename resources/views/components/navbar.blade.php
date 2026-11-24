@@ -2,6 +2,7 @@
     Navbar publik. Item berasal dari Modules\Core\Support\Navigation (modul menambah itemnya sendiri).
     Menu HP memakai Popover API: tombol popovertarget membuka panel geser tanpa JavaScript,
     sehingga lolos CSP ketat (tanpa skrip inline). Esc dan klik di luar panel menutupnya.
+    Peramban tanpa Popover API mendapat .nav-fallback (tautan sebaris) sebagai tampilan bawaan.
 --}}
 @php
     $items = array_map(function (array $item) {
@@ -38,11 +39,27 @@
         </nav>
 
         <button type="button" popovertarget="menu-utama"
-                class="-mr-2 inline-flex size-11 items-center justify-center rounded-full text-ink-900 hover:bg-primary-50 lg:hidden">
+                class="menu-toggle -mr-2 size-11 items-center justify-center rounded-full text-ink-900 hover:bg-primary-50 lg:hidden">
             <x-site-icon name="menu" class="size-6" />
             <span class="sr-only">Buka menu</span>
         </button>
     </div>
+
+    {{-- Fallback tanpa Popover API (peramban lama): tautan sebaris di bawah header. Lihat .nav-fallback di app.css. --}}
+    <nav aria-label="Navigasi utama (tanpa menu geser)" class="nav-fallback border-t border-ink-200 lg:hidden">
+        <ul class="container-site flex flex-wrap items-center gap-x-1 gap-y-2 py-2">
+            @foreach ($items as $item)
+                <li @class(['ml-auto' => $item['emphasis']])>
+                    <a href="{{ $item['url'] }}" @if ($item['active']) aria-current="page" @endif @class([
+                        'btn btn-primary px-4' => $item['emphasis'],
+                        'inline-flex min-h-11 items-center rounded-md px-3 font-medium no-underline' => ! $item['emphasis'],
+                        'text-ink-900 underline decoration-gold-500 decoration-2 underline-offset-8' => $item['active'] && ! $item['emphasis'],
+                        'text-ink-600 hover:text-primary-800' => ! $item['active'] && ! $item['emphasis'],
+                    ])>{{ $item['label'] }}</a>
+                </li>
+            @endforeach
+        </ul>
+    </nav>
 
     <div id="menu-utama" popover class="drawer lg:hidden" aria-label="Menu">
         <div class="flex h-16 items-center justify-between border-b border-ink-200 px-4">

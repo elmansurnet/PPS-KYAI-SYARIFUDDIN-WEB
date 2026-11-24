@@ -1,6 +1,7 @@
 {{--
     Logo situs dari SiteSettings. Bila logo belum diunggah, tampil monogram lengkung
-    berisi inisial nama situs plus nama situs sebagai wordmark (bukan logo buatan).
+    berisi inisial nama situs. Nama situs selalu tampil sebagai teks, jadi gambar logo memakai
+    alt="" (dekoratif) agar pembaca layar tidak membacanya dua kali; tautan bernama dari teks itu.
     tone: light (di latar putih) | dark (di latar hijau tua).
 --}}
 @props(['tone' => 'light'])
@@ -16,8 +17,8 @@
 ]) }}>
     @if ($site->logo_path)
         <img src="{{ \Illuminate\Support\Facades\Storage::disk('public')->url($site->logo_path) }}"
-             alt="Logo {{ $site->site_name }}" data-logo="image"
-             class="h-10 w-auto max-w-[9rem] object-contain sm:h-11" width="160" height="44" decoding="async">
+             alt="" data-logo="image"
+             class="h-10 w-auto max-w-[9rem] object-contain sm:h-11" decoding="async">
     @else
         <span data-logo="monogram" class="contents">
             <span class="monogram h-11 w-9 text-[0.95rem]" aria-hidden="true">{{ \Modules\Core\Support\SiteIdentity::initials($site->site_name) }}</span>

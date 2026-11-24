@@ -1,6 +1,7 @@
 {{--
     Tombol publik. variant: primary (hijau, aksi utama), gold (sekunder, hemat), ghost (netral).
-    Dengan href dirender sebagai <a>, tanpa href sebagai <button type="button|submit">.
+    Dengan href dirender sebagai <a> (href disaring SafeHref: hanya /path, #anchor, http(s), mailto:, tel:;
+    selain itu menjadi "#"), tanpa href sebagai <button type="button|submit">.
 --}}
 @props([
     'variant' => 'primary',
@@ -18,8 +19,8 @@
     ]));
 @endphp
 
-@if ($href)
-<a href="{{ $href }}" {{ $attributes->class($classes) }}>{{ $slot }}</a>
+@if ($href !== null && $href !== '')
+<a href="{{ \Modules\Core\Support\SafeHref::sanitize($href) }}" {{ $attributes->class($classes) }}>{{ $slot }}</a>
 @else
 <button type="{{ $type }}" {{ $attributes->class($classes) }}>{{ $slot }}</button>
 @endif
