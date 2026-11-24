@@ -4,6 +4,8 @@ namespace Database\Seeders;
 
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
+use Modules\Berita\Database\Seeders\BeritaSeeder;
+use Modules\Berita\Providers\BeritaServiceProvider;
 use Modules\Core\Database\Seeders\RoleSeeder;
 use Modules\Landing\Database\Seeders\LandingSeeder;
 use Modules\Landing\Providers\LandingServiceProvider;
@@ -22,6 +24,10 @@ class DatabaseSeeder extends Seeder
         // Seeder modul hanya dijalankan bila modulnya aktif (tabelnya baru ada bila modul dimuat).
         if (in_array(LandingServiceProvider::class, config('modules.enabled', []), true)) {
             $this->call(LandingSeeder::class);
+        }
+
+        if (in_array(BeritaServiceProvider::class, config('modules.enabled', []), true)) {
+            $this->call(BeritaSeeder::class);
         }
     }
 }

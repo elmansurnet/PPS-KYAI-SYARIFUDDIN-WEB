@@ -216,6 +216,80 @@
         }
     }
 
+    /*
+     * Isi artikel (HTML yang sudah disanitasi: p, h2-h4, ul/ol, blockquote, pre/code, tabel, a).
+     * Ditulis tangan di bawah token tema, tanpa plugin typography. Lebar baca ~65 karakter.
+     */
+    .article-body {
+        @apply text-lg/[1.8] text-ink-900;
+    }
+
+    .article-body > * {
+        @apply max-w-prose;
+    }
+
+    .article-body > * + * {
+        @apply mt-5;
+    }
+
+    .article-body h2 {
+        @apply mt-12 text-subtitle;
+    }
+
+    .article-body h3 {
+        @apply mt-9 text-xl/snug;
+    }
+
+    .article-body h4 {
+        @apply mt-7 text-lg/snug;
+    }
+
+    .article-body a {
+        @apply font-medium text-primary-700 underline underline-offset-4 hover:text-primary-800;
+        overflow-wrap: anywhere;
+    }
+
+    .article-body ul {
+        @apply list-disc pl-6;
+    }
+
+    .article-body ol {
+        @apply list-decimal pl-6;
+    }
+
+    .article-body li + li {
+        @apply mt-2;
+    }
+
+    .article-body blockquote {
+        @apply border-l-4 border-gold-500 pl-5 font-serif text-xl/relaxed text-ink-600 italic;
+    }
+
+    .article-body pre {
+        @apply overflow-x-auto rounded-xl bg-ink-100 p-4 text-base/relaxed;
+    }
+
+    .article-body code {
+        @apply font-mono text-[0.9em];
+    }
+
+    .article-body hr {
+        @apply my-10 border-ink-200;
+    }
+
+    .article-body table {
+        @apply block max-w-full overflow-x-auto text-base;
+    }
+
+    .article-body th,
+    .article-body td {
+        @apply border border-ink-200 px-3 py-2 text-left align-top;
+    }
+
+    .article-body th {
+        @apply bg-ink-50 font-semibold;
+    }
+
     /* Monogram cadangan saat logo belum diunggah: bentuk lengkung mihrab. */
     .monogram {
         @apply inline-flex shrink-0 items-end justify-center bg-primary-700 pb-1.5 font-serif text-white;
