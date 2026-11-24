@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\User;
+use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -221,4 +222,30 @@ test('panitia cannot create posts or categories', function () {
 
     expect(PostResource::canCreate())->toBeFalse()->and(CategoryResource::canCreate())->toBeFalse();
     $this->get('/admin/posts/create')->assertForbidden();
+});
+
+test('author has no bulk delete and cannot remove others posts, admin can bulk delete', function () {
+    $writer = beritaUser('penulis_berita');
+    $mine = Post::factory()->count(2)->create(['author_id' => $writer->id]);
+    $theirs = Post::factory()->count(2)->create();
+    $ids = $mine->merge($theirs)->pluck('id')->all();
+    $bulk = TestAction::make(DeleteBulkAction::class)->table()->bulk();
+
+    // Penulis: aksi hapus massal tersembunyi (deleteAny ditolak) dan tidak bisa dipaksa dipanggil.
+    $this->actingAs($writer);
+    $component = Livewire::test(ListPosts::class)->selectTableRecords($ids)->assertActionHidden($bulk);
+    try {
+        $component->callAction($bulk);
+    } catch (Throwable) {
+        // diharapkan: aksi tidak dapat dijalankan
+    }
+    expect(Post::count())->toBe(4);
+
+    // Penulis tetap bisa menghapus miliknya sendiri satu per satu, bukan milik orang lain.
+    expect($writer->can('delete', $mine->first()))->toBeTrue()->and($writer->can('delete', $theirs->first()))->toBeFalse();
+
+    // Admin: hapus massal berjalan.
+    $this->actingAs(beritaUser('admin'));
+    Livewire::test(ListPosts::class)->selectTableRecords($ids)->callAction($bulk);
+    expect(Post::count())->toBe(0);
 });
