@@ -15,13 +15,17 @@ use RuntimeException;
  */
 class NikHasher
 {
+    /** Panjang minimum kunci (karakter). Ruang NIK kecil, jadi kunci lemah membuat hash bisa ditebak offline. */
+    public const MIN_KEY_LENGTH = 32;
+
     public static function hash(string $nik): string
     {
         $key = config('pendaftaran.nik_hmac_key');
 
-        if (! is_string($key) || trim($key) === '') {
+        if (! is_string($key) || strlen(trim($key)) < self::MIN_KEY_LENGTH) {
             throw new RuntimeException(
-                'NIK_HMAC_KEY belum diisi. Buat dengan: php -r "echo bin2hex(random_bytes(32));" lalu isi di .env '
+                'NIK_HMAC_KEY belum diisi atau terlalu pendek (minimal 32 karakter acak, disarankan 64 karakter hex). '
+                .'Buat dengan: php -r "echo bin2hex(random_bytes(32));" lalu isi di .env '
                 .'(cadangkan terpisah dari APP_KEY, jangan pakai ulang APP_KEY).'
             );
         }

@@ -115,3 +115,61 @@ test('casts for dates and booleans', function () {
         ->and($a->pernah_mondok)->toBeTrue()
         ->and($a->orang_tua_meninggal)->toBeFalse();
 });
+
+test('nik accepts int and Stringable and keeps the hash in sync', function () {
+    $a = Applicant::factory()->create(['nik' => NIK_A]);
+
+    $a->update(['nik' => 3201010101010002]);
+    expect($a->fresh()->nik)->toBe('3201010101010002')
+        ->and($a->fresh()->nik_hash)->toBe(NikHasher::hash('3201010101010002'));
+
+    $a->update(['nik' => new class implements Stringable
+    {
+        public function __toString(): string
+        {
+            return '3201 0101 0101 0003';
+        }
+    }]);
+    expect($a->fresh()->nik_hash)->toBe(NikHasher::hash('3201010101010003'));
+});
+
+test('nik rejects null, arrays and non 16 digit values without leaking the value', function (mixed $value) {
+    $a = Applicant::factory()->create(['nik' => NIK_A]);
+
+    expect(fn () => $a->nik = $value)->toThrow(InvalidArgumentException::class);
+    expect($a->nik_hash)->toBe(NikHasher::hash(NIK_A));
+})->with([null, [[NIK_A]], 'abc', '', '320101010101000', '32010101010100011', 1.5, true]);
+
+test('nik validation message does not contain the value', function () {
+    try {
+        Applicant::factory()->make(['nik' => '12345']);
+    } catch (InvalidArgumentException $e) {
+        expect($e->getMessage())->not->toContain('12345');
+
+        return;
+    }
+    $this->fail('no exception');
+});
+
+test('findByNik rejects invalid input', function () {
+    expect(fn () => Applicant::findByNik('abc'))->toThrow(InvalidArgumentException::class)
+        ->and(fn () => Applicant::findByNik(''))->toThrow(InvalidArgumentException::class);
+});
+
+test('isDuplicateNikViolation detects only nik_hash unique violations', function () {
+    Applicant::factory()->create(['nik' => NIK_A]);
+
+    try {
+        Applicant::factory()->create(['nik' => NIK_A]);
+        $this->fail('no exception');
+    } catch (QueryException $e) {
+        expect(Applicant::isDuplicateNikViolation($e))->toBeTrue();
+    }
+
+    try {
+        Applicant::factory()->create(['nama_lengkap' => null]);
+        $this->fail('no exception');
+    } catch (QueryException $e) {
+        expect(Applicant::isDuplicateNikViolation($e))->toBeFalse();
+    }
+});

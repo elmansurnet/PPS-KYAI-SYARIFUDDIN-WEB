@@ -6,8 +6,11 @@ use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\QueryException;
+use InvalidArgumentException;
 use Modules\Pendaftaran\Database\Factories\ApplicantFactory;
 use Modules\Pendaftaran\Support\NikHasher;
+use Stringable;
 
 /**
  * Calon santri. Kelas disimpan sebagai teks (label KelasOption saat mendaftar) supaya riwayat
@@ -17,6 +20,13 @@ use Modules\Pendaftaran\Support\NikHasher;
  * Keamanan: nik terenkripsi (cast encrypted), nik_hash HMAC diisi otomatis saat nik di-set dan
  * tidak bisa diisi massal. Bendera status dan kk_path tidak ada di $fillable: ubah lewat forceFill
  * atau setter eksplisit di kode admin.
+ *
+ * ATURAN KODE PENDAFTARAN (lihat Modules/Pendaftaran/README.md):
+ * - Cek dulu dengan Applicant::findByNik(), LALU tangkap pelanggaran unik lewat
+ *   Applicant::isDuplicateNikViolation(). Jangan pernah mencatat atau menampilkan pesan QueryException:
+ *   pesannya memuat semua binding (nama, tanggal lahir, alamat, HP orang tua, NIK terenkripsi).
+ * - Jalur yang melewati Eloquent (insert/upsert/DB::table/replicate/insertOrIgnore) tidak menjalankan
+ *   logika nik_hash. Selalu lewat instance model.
  *
  * @property string $nik
  * @property string $nik_hash
@@ -68,17 +78,49 @@ class Applicant extends Model
      */
     public function setAttribute($key, $value)
     {
-        if ($key === 'nik' && is_string($value)) {
-            $value = NikHasher::normalize($value);
+        if ($key === 'nik') {
+            $value = self::cleanNik($value);
             parent::setAttribute('nik_hash', NikHasher::hash($value));
         }
 
         return parent::setAttribute($key, $value);
     }
 
+    /**
+     * Normalisasi dan validasi NIK: hanya string, int, atau Stringable; hasil harus tepat 16 digit.
+     * Pesan galat sengaja tidak memuat nilainya (bisa data pribadi).
+     */
+    private static function cleanNik(mixed $nik): string
+    {
+        if (! (is_string($nik) || is_int($nik) || $nik instanceof Stringable)) {
+            throw new InvalidArgumentException('NIK harus berupa teks atau angka.');
+        }
+
+        $clean = NikHasher::normalize((string) $nik);
+
+        if (! preg_match('/^\d{16}$/', $clean)) {
+            throw new InvalidArgumentException('NIK harus tepat 16 digit.');
+        }
+
+        return $clean;
+    }
+
     public static function findByNik(string $nik): ?self
     {
-        return static::query()->where('nik_hash', NikHasher::hash($nik))->first();
+        return static::query()->where('nik_hash', NikHasher::hash(self::cleanNik($nik)))->first();
+    }
+
+    /**
+     * True bila pengecualian adalah pelanggaran unik pada nik_hash (NIK sudah terdaftar).
+     * Memeriksa pesan driver (errorInfo), bukan pesan QueryException yang memuat seluruh binding (data pribadi).
+     */
+    public static function isDuplicateNikViolation(QueryException $e): bool
+    {
+        $driverMessage = (string) ($e->errorInfo[2] ?? '');
+
+        return (string) ($e->errorInfo[0] ?? $e->getCode()) === '23000'
+            && str_contains($driverMessage, 'nik_hash')
+            && (stripos($driverMessage, 'unique') !== false || stripos($driverMessage, 'duplicate') !== false);
     }
 
     public function nikLast4(): string
