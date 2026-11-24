@@ -19,6 +19,7 @@ use Illuminate\Session\Middleware\StartSession;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
 use Modules\Core\Filament\CorePlugin;
 use Modules\Core\Filament\Resources\UserResource;
+use Modules\Core\Http\Middleware\SecurityHeaders;
 use Modules\Core\Providers\CoreServiceProvider;
 
 class AdminPanelProvider extends PanelProvider
@@ -45,6 +46,7 @@ class AdminPanelProvider extends PanelProvider
                 SubstituteBindings::class,
                 DisableBladeIconComponents::class,
                 DispatchServingFilamentEvent::class,
+                SecurityHeaders::class, // panel Filament tidak memakai grup middleware web
             ])
             ->authMiddleware([
                 Authenticate::class,
