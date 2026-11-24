@@ -1,9 +1,13 @@
 <?php
 
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Modules\Core\Contracts\LatestNewsProvider;
 use Modules\Core\Providers\CoreServiceProvider;
 use Modules\Core\Tests\Fixtures\Dummy\Providers\DummyServiceProvider;
 use Modules\Core\Tests\Fixtures\Other\Providers\OtherServiceProvider;
+
+// Beberapa tes membuka beranda, yang membaca SiteSettings dari database.
+uses(RefreshDatabase::class);
 
 function enableModules(array $providers): void
 {

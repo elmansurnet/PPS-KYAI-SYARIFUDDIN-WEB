@@ -5,6 +5,7 @@ namespace Modules\Core\Providers;
 use Filament\Contracts\Plugin;
 use InvalidArgumentException;
 use Modules\Core\Contracts\LatestNewsProvider;
+use Modules\Core\Support\Navigation;
 use Modules\Core\Support\NullLatestNewsProvider;
 
 class CoreServiceProvider extends ModuleServiceProvider
@@ -20,6 +21,13 @@ class CoreServiceProvider extends ModuleServiceProvider
     public function register(): void
     {
         $this->app->bindIf(LatestNewsProvider::class, NullLatestNewsProvider::class);
+
+        // Tautan bawaan navbar publik. Modul Landing, Berita, dan Pendaftaran boleh menimpa
+        // item dengan kunci yang sama dari provider-nya sendiri (lihat Navigation).
+        $this->app->singleton(Navigation::class, fn () => (new Navigation)
+            ->add('beranda', 'Beranda', '/', 10)
+            ->add('berita', 'Berita', '/berita', 20)
+            ->add('pendaftaran', 'Pendaftaran', '/daftar', 90, emphasis: true));
 
         $this->registerEnabledModules();
     }
