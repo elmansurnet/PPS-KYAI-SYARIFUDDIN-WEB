@@ -9,6 +9,9 @@ use Modules\Berita\Providers\BeritaServiceProvider;
 use Modules\Core\Database\Seeders\RoleSeeder;
 use Modules\Landing\Database\Seeders\LandingSeeder;
 use Modules\Landing\Providers\LandingServiceProvider;
+use Modules\Pendaftaran\Database\Seeders\MasterDataSeeder;
+use Modules\Pendaftaran\Database\Seeders\PendaftaranSeeder;
+use Modules\Pendaftaran\Providers\PendaftaranServiceProvider;
 
 class DatabaseSeeder extends Seeder
 {
@@ -28,6 +31,11 @@ class DatabaseSeeder extends Seeder
 
         if (in_array(BeritaServiceProvider::class, config('modules.enabled', []), true)) {
             $this->call(BeritaSeeder::class);
+        }
+
+        if (in_array(PendaftaranServiceProvider::class, config('modules.enabled', []), true)) {
+            $this->call(PendaftaranSeeder::class);
+            $this->call(MasterDataSeeder::class);
         }
     }
 }

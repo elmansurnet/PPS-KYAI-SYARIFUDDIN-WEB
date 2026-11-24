@@ -9,6 +9,7 @@ return [
     'enabled' => [
         \Modules\Landing\Providers\LandingServiceProvider::class,
         \Modules\Berita\Providers\BeritaServiceProvider::class,
+        \Modules\Pendaftaran\Providers\PendaftaranServiceProvider::class,
     ],
 
     /*
