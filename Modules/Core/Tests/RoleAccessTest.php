@@ -2,6 +2,7 @@
 
 use App\Models\User;
 use BezhanSalleh\FilamentShield\Resources\Roles\RoleResource;
+use Filament\Actions\DeleteBulkAction;
 use Filament\Facades\Filament;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Gate;
@@ -11,6 +12,7 @@ use Modules\Core\Database\Seeders\RoleSeeder;
 use Modules\Core\Filament\Resources\UserResource;
 use Modules\Core\Filament\Resources\UserResource\Pages\CreateUser;
 use Modules\Core\Filament\Resources\UserResource\Pages\EditUser;
+use Modules\Core\Filament\Resources\UserResource\Pages\ListUsers;
 use Modules\Core\Tests\Fixtures\Applicant\FakeApplicant;
 use Modules\Core\Tests\Fixtures\Applicant\FakeApplicantPolicy;
 use Modules\Core\Tests\Fixtures\Applicant\FakeApplicantResource;
@@ -151,4 +153,65 @@ test('superadmin can edit any account', function () {
 
     expect(UserResource::canEdit(userWithRole('admin')))->toBeTrue();
     expect(UserResource::canEdit($super))->toBeTrue();
+});
+
+test('admin bulk delete cannot remove a superadmin or themselves', function () {
+    $super = userWithRole('superadmin');
+    $admin = userWithRole('admin');
+    $this->actingAs($admin);
+
+    Livewire::test(ListUsers::class)
+        ->callTableBulkAction(DeleteBulkAction::class, [$super, $admin]);
+
+    expect(User::find($super->getKey()))->not->toBeNull();
+    expect(User::find($admin->getKey()))->not->toBeNull();
+});
+
+test('last superadmin cannot be deleted', function () {
+    $super = userWithRole('superadmin');
+
+    expect(fn () => $super->delete())->toThrow(LogicException::class);
+    expect(User::find($super->getKey()))->not->toBeNull();
+});
+
+test('superadmin role cannot be removed from the last superadmin', function () {
+    $super = userWithRole('superadmin');
+
+    expect(fn () => $super->removeRole('superadmin'))->toThrow(LogicException::class);
+    expect(fn () => $super->syncRoles(['admin']))->toThrow(LogicException::class);
+    expect($super->fresh()->isSuperadmin())->toBeTrue();
+});
+
+test('superadmin cannot strip their own role through the form when last', function () {
+    $super = userWithRole('superadmin');
+    $this->actingAs($super);
+
+    Livewire::test(EditUser::class, ['record' => $super->getKey()])
+        ->fillForm(['roles' => []])
+        ->call('save')
+        ->assertHasFormErrors(['roles']);
+
+    expect($super->fresh()->isSuperadmin())->toBeTrue();
+});
+
+test('with two superadmins one may be deleted', function () {
+    $a = userWithRole('superadmin');
+    $b = userWithRole('superadmin');
+
+    expect($a->delete())->toBeTrue();
+    expect(User::find($b->getKey()))->not->toBeNull();
+});
+
+test('delete action is hidden for the own record', function () {
+    $super = userWithRole('superadmin');
+    $other = userWithRole('superadmin');
+    $this->actingAs($super);
+
+    Livewire::test(ListUsers::class)
+        ->assertTableActionHidden('delete', $super)
+        ->assertTableActionVisible('delete', $other);
+});
+
+test('admin login page renders', function () {
+    $this->get('/admin/login')->assertOk();
 });

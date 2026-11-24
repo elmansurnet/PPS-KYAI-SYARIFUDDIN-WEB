@@ -5,6 +5,10 @@ namespace App\Policies;
 use App\Models\User;
 use Illuminate\Auth\Access\HandlesAuthorization;
 
+/*
+ * PERINGATAN: policy ini dirawat manual dan memuat pagar anti eskalasi hak.
+ * Jangan digenerate ulang oleh shield:generate (pakai --option=permissions).
+ */
 class UserPolicy
 {
     use HandlesAuthorization;

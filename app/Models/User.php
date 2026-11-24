@@ -11,6 +11,8 @@ use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use LogicException;
+use Spatie\Permission\Models\Role;
 use Spatie\Permission\Traits\HasRoles;
 
 #[Fillable(['name', 'email', 'password'])]
@@ -34,6 +36,56 @@ class User extends Authenticatable implements FilamentUser
     }
 
     public const SUPERADMIN_ROLE = 'superadmin';
+
+    /**
+     * Dicek di delete(), bukan di event deleting: listener Spatie mencabut role
+     * lebih dulu sehingga status superadmin sudah hilang saat event berjalan.
+     */
+    public function delete()
+    {
+        if ($this->isLastSuperadmin()) {
+            throw new LogicException('Superadmin terakhir tidak boleh dihapus.');
+        }
+
+        return parent::delete();
+    }
+
+    /** True bila akun ini superadmin satu-satunya. Berlaku di semua jalur, juga bila Gate::before meloloskan. */
+    public function isLastSuperadmin(): bool
+    {
+        return $this->isSuperadmin()
+            && ! static::role(self::SUPERADMIN_ROLE)->whereKeyNot($this->getKey())->exists();
+    }
+
+    public function removeRole($role)
+    {
+        $this->guardLastSuperadminRoleRemoval(is_array($role) ? $role : [$role]);
+
+        return parent::removeRole($role);
+    }
+
+    public function syncRoles(...$roles)
+    {
+        $flat = collect($roles)->flatten()->all();
+        $keepsSuperadmin = collect($flat)->contains(
+            fn ($r) => $r === self::SUPERADMIN_ROLE || ($r instanceof Role && $r->name === self::SUPERADMIN_ROLE)
+        );
+
+        if (! $keepsSuperadmin) {
+            $this->guardLastSuperadminRoleRemoval([self::SUPERADMIN_ROLE]);
+        }
+
+        return parent::syncRoles(...$roles);
+    }
+
+    private function guardLastSuperadminRoleRemoval(array $removing): void
+    {
+        $names = collect($removing)->map(fn ($r) => $r instanceof Role ? $r->name : $r);
+
+        if ($names->contains(self::SUPERADMIN_ROLE) && $this->isLastSuperadmin()) {
+            throw new LogicException('Role superadmin tidak boleh dicabut dari superadmin terakhir.');
+        }
+    }
 
     public function isSuperadmin(): bool
     {

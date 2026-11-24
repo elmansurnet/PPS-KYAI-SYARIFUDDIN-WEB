@@ -10,7 +10,8 @@ use Spatie\Permission\PermissionRegistrar;
 
 /**
  * Role dasar dan izin awalnya. Aman dijalankan ulang: setelah modul baru
- * menambah izin (php artisan shield:generate --all --panel=admin), jalankan
+ * menambah izin, jalankan `php artisan shield:generate --all --panel=admin --option=permissions`
+ * (hanya izin; JANGAN tanpa --option karena menimpa UserPolicy buatan tangan), lalu jalankan
  * seeder ini lagi supaya role admin ikut menerima izin fitur yang baru.
  */
 class RoleSeeder extends Seeder

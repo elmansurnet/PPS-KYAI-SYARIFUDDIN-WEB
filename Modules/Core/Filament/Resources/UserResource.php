@@ -70,7 +70,10 @@ class UserResource extends Resource
                 )
                 ->multiple()
                 ->preload()
-                ->rules([static::forbidSuperadminRoleForNonSuperadmin()]),
+                ->rules(fn (?User $record): array => [
+                    static::forbidSuperadminRoleForNonSuperadmin(),
+                    static::keepLastSuperadminRole($record),
+                ]),
         ]);
     }
 
@@ -84,10 +87,10 @@ class UserResource extends Resource
             ])
             ->recordActions([
                 EditAction::make(),
-                DeleteAction::make(),
+                DeleteAction::make()->hidden(fn (User $record): bool => $record->is(Auth::user())),
             ])
             ->toolbarActions([
-                DeleteBulkAction::make(),
+                DeleteBulkAction::make()->authorizeIndividualRecords('delete'),
             ]);
     }
 
@@ -120,6 +123,28 @@ class UserResource extends Resource
 
                 if ($superadminId !== null && in_array($superadminId, (array) $value, false)) {
                     $fail('Role superadmin hanya dapat diberikan oleh superadmin.');
+                }
+            }
+        };
+    }
+
+    /** Role superadmin tidak boleh dicabut dari superadmin terakhir (berlaku juga untuk superadmin). */
+    private static function keepLastSuperadminRole(?User $record): ValidationRule
+    {
+        return new class($record) implements ValidationRule
+        {
+            public function __construct(private readonly ?User $record) {}
+
+            public function validate(string $attribute, mixed $value, Closure $fail): void
+            {
+                if (! $this->record?->isLastSuperadmin()) {
+                    return;
+                }
+
+                $superadminId = Role::where('name', User::SUPERADMIN_ROLE)->value('id');
+
+                if (! in_array($superadminId, (array) $value, false)) {
+                    $fail('Role superadmin tidak boleh dicabut dari superadmin terakhir.');
                 }
             }
         };
