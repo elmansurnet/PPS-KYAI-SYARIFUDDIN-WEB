@@ -28,10 +28,11 @@ return [
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
 
-    // Di local/testing memakai kunci uji resmi Cloudflare (selalu lolos) lewat config; production wajib mengisi env.
+    // Kunci uji Cloudflare (selalu lolos) HANYA bila APP_ENV persis 'testing'. Di local wajib isi
+    // kunci di .env (Cloudflare menyediakan kunci uji untuk ditempel); kosong berarti gagal tertutup.
     'turnstile' => [
-        'site_key' => env('TURNSTILE_SITE_KEY') ?: (in_array(env('APP_ENV'), ['local', 'testing'], true) ? '1x00000000000000000000AA' : null),
-        'secret' => env('TURNSTILE_SECRET_KEY') ?: (in_array(env('APP_ENV'), ['local', 'testing'], true) ? '1x0000000000000000000000000000000AA' : null),
+        'site_key' => env('TURNSTILE_SITE_KEY') ?: (env('APP_ENV') === 'testing' ? '1x00000000000000000000AA' : null),
+        'secret' => env('TURNSTILE_SECRET_KEY') ?: (env('APP_ENV') === 'testing' ? '1x0000000000000000000000000000000AA' : null),
     ],
 
     'slack' => [

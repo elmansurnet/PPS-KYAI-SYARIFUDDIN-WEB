@@ -115,3 +115,27 @@ test('config exposes turnstile keys, .env.example has placeholders, verifier has
     expect(file_get_contents(base_path('Modules/Core/Services/TurnstileVerifier.php')))
         ->not->toContain('1x0000000000000000000000000000000AA');
 });
+
+test('empty secret logs a warning naming the key but never a value', function () {
+    config(['services.turnstile.secret' => '']);
+    Log::spy();
+
+    expect(app(TurnstileVerifier::class)->passes('tok'))->toBeFalse();
+
+    Log::shouldHaveReceived('warning')->withArgs(fn ($m) => str_contains($m, 'TURNSTILE_SECRET_KEY'))->once();
+});
+
+test('always-pass test keys are used only when APP_ENV is exactly testing', function () {
+    $run = function (string $env): array {
+        $code = 'function env($k, $d = null) { $v = getenv($k); return $v === false ? $d : $v; } echo json_encode(require "config/services.php");';
+        $result = Illuminate\Support\Facades\Process::path(base_path())
+            ->env(['APP_ENV' => $env, 'TURNSTILE_SECRET_KEY' => '', 'TURNSTILE_SITE_KEY' => ''])
+            ->run([PHP_BINARY, '-r', $code]);
+
+        return json_decode($result->output(), true)['turnstile'];
+    };
+
+    expect($run('testing')['secret'])->not->toBeNull();
+    expect($run('local')['secret'])->toBeNull();
+    expect($run('production')['secret'])->toBeNull();
+});

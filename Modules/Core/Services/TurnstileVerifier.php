@@ -15,7 +15,13 @@ class TurnstileVerifier
     {
         $secret = (string) config('services.turnstile.secret');
 
-        if ($token === '' || $secret === '') {
+        if ($secret === '') {
+            Log::warning('Turnstile tidak dikonfigurasi: services.turnstile.secret (env TURNSTILE_SECRET_KEY) kosong; verifikasi ditolak.');
+
+            return false;
+        }
+
+        if ($token === '') {
             return false;
         }
 

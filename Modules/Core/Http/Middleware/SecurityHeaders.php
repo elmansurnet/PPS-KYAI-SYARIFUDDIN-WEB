@@ -14,6 +14,9 @@ use Symfony\Component\HttpFoundation\Response;
  *   memakai skrip inline dan evaluasi ekspresi, sehingga script-src ketat akan merusaknya.
  *   Di sana hanya CSP yang kompatibel (anti-framing, tanpa object, base-uri terkunci)
  *   plus header non-CSP yang sama.
+ *
+ * Halaman publik interaktif harus memakai build Livewire/Alpine yang aman-CSP atau form
+ * server-rendered; nonce per-request dapat ditambahkan di handle()/publicPolicy().
  */
 class SecurityHeaders
 {

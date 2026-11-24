@@ -100,3 +100,63 @@ test('test_app_debug_is_false_in_production_config', function () {
     $env = file_get_contents(base_path('.env.example'));
     expect($env)->toMatch('/^APP_DEBUG=false\s*$/m')->toMatch('/^APP_ENV=production\s*$/m');
 });
+
+test('x-forwarded-host from a client does not change host or generated urls', function () {
+    Route::middleware('web')->get('/__host-probe', fn () => response()->json([
+        'host' => request()->getHost(),
+        'url' => url('/x'),
+    ]));
+
+    $json = $this->get('/__host-probe', ['X-Forwarded-Host' => 'evil.example', 'X-Forwarded-Port' => '4443', 'X-Forwarded-Prefix' => '/evil'])->json();
+
+    expect($json['host'])->not->toBe('evil.example')
+        ->and($json['url'])->not->toContain('evil');
+});
+
+test('x-forwarded-for client ip is used', function () {
+    Route::middleware('web')->get('/__ip-probe', fn () => request()->ip());
+
+    $this->get('/__ip-probe', ['X-Forwarded-For' => '203.0.113.9'])->assertSee('203.0.113.9');
+});
+
+test('trusted hosts are limited to the APP_URL host outside local', function () {
+    config(['app.url' => 'https://pps.example.id']);
+
+    $hosts = (new Illuminate\Http\Middleware\TrustHosts(app()))->hosts();
+
+    expect($hosts)->toBe(['^pps\.example\.id$']);
+});
+
+test('production forces the url root to APP_URL', function () {
+    config(['app.url' => 'https://pps.example.id']);
+    app()->detectEnvironment(fn () => 'production');
+
+    try {
+        (new App\Providers\AppServiceProvider(app()))->boot();
+
+        expect(url('/x'))->toBe('https://pps.example.id/x');
+    } finally {
+        Illuminate\Support\Facades\URL::forceRootUrl(null);
+        Illuminate\Support\Facades\URL::forceScheme(null);
+    }
+});
+
+test('security headers run first in the web group and the admin panel stack', function () {
+    expect(app('router')->getMiddlewareGroups()['web'][0])->toBe(Modules\Core\Http\Middleware\SecurityHeaders::class);
+
+    $stack = array_values(array_filter(
+        Filament\Facades\Filament::getPanel('admin')->getMiddleware(),
+        fn ($m) => ! str_starts_with($m, 'panel:'),
+    ));
+    expect($stack[0])->toBe(Modules\Core\Http\Middleware\SecurityHeaders::class);
+});
+
+test('error responses such as 419 also carry the security headers', function () {
+    Route::middleware('web')->post('/__csrf-probe', fn () => abort(419));
+
+    $response = $this->post('/__csrf-probe');
+
+    $response->assertStatus(419);
+    $response->assertHeader('X-Content-Type-Options', 'nosniff');
+    expect($response->headers->get('Content-Security-Policy'))->toContain("default-src 'self'");
+});

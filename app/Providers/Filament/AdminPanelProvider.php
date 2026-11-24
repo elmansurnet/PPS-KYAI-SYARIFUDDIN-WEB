@@ -37,6 +37,7 @@ class AdminPanelProvider extends PanelProvider
             ->plugin(FilamentShieldPlugin::make())
             ->plugin(CorePlugin::make())
             ->middleware([
+                SecurityHeaders::class, // paling awal: panel tidak memakai grup web; respons 419/redirect ikut berheader
                 EncryptCookies::class,
                 AddQueuedCookiesToResponse::class,
                 StartSession::class,
@@ -46,7 +47,6 @@ class AdminPanelProvider extends PanelProvider
                 SubstituteBindings::class,
                 DisableBladeIconComponents::class,
                 DispatchServingFilamentEvent::class,
-                SecurityHeaders::class, // panel Filament tidak memakai grup middleware web
             ])
             ->authMiddleware([
                 Authenticate::class,
