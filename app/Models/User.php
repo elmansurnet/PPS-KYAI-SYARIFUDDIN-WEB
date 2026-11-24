@@ -20,7 +20,12 @@ use Spatie\Permission\Traits\HasRoles;
 class User extends Authenticatable implements FilamentUser
 {
     /** @use HasFactory<UserFactory> */
-    use HasFactory, HasRoles, Notifiable;
+    use HasFactory, Notifiable;
+
+    use HasRoles {
+        removeRole as protected traitRemoveRole;
+        syncRoles as protected traitSyncRoles;
+    }
 
     /**
      * Get the attributes that should be cast.
@@ -57,32 +62,35 @@ class User extends Authenticatable implements FilamentUser
             && ! static::role(self::SUPERADMIN_ROLE)->whereKeyNot($this->getKey())->exists();
     }
 
-    public function removeRole($role)
+    public function removeRole(...$role): static
     {
-        $this->guardLastSuperadminRoleRemoval(is_array($role) ? $role : [$role]);
-
-        return parent::removeRole($role);
-    }
-
-    public function syncRoles(...$roles)
-    {
-        $flat = collect($roles)->flatten()->all();
-        $keepsSuperadmin = collect($flat)->contains(
-            fn ($r) => $r === self::SUPERADMIN_ROLE || ($r instanceof Role && $r->name === self::SUPERADMIN_ROLE)
-        );
-
-        if (! $keepsSuperadmin) {
-            $this->guardLastSuperadminRoleRemoval([self::SUPERADMIN_ROLE]);
+        if ($this->rolesContainSuperadmin($role)) {
+            $this->guardLastSuperadmin();
         }
 
-        return parent::syncRoles(...$roles);
+        return $this->traitRemoveRole(...$role);
     }
 
-    private function guardLastSuperadminRoleRemoval(array $removing): void
+    public function syncRoles(...$roles): static
     {
-        $names = collect($removing)->map(fn ($r) => $r instanceof Role ? $r->name : $r);
+        if ($this->exists && ! $this->rolesContainSuperadmin($roles)) {
+            $this->guardLastSuperadmin();
+        }
 
-        if ($names->contains(self::SUPERADMIN_ROLE) && $this->isLastSuperadmin()) {
+        return $this->traitSyncRoles(...$roles);
+    }
+
+    /** Nama, id, model Role, atau koleksi/array dari semuanya. */
+    private function rolesContainSuperadmin(array $roles): bool
+    {
+        $superadminId = Role::where('name', self::SUPERADMIN_ROLE)->value('id');
+
+        return $superadminId !== null && in_array($superadminId, $this->collectRoles($roles), false);
+    }
+
+    private function guardLastSuperadmin(): void
+    {
+        if ($this->isLastSuperadmin()) {
             throw new LogicException('Role superadmin tidak boleh dicabut dari superadmin terakhir.');
         }
     }

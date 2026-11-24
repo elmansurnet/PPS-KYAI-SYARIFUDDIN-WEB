@@ -215,3 +215,39 @@ test('delete action is hidden for the own record', function () {
 test('admin login page renders', function () {
     $this->get('/admin/login')->assertOk();
 });
+
+test('removing a non-superadmin role works', function () {
+    $user = userWithRole('admin');
+
+    expect($user->removeRole('admin'))->toBe($user);
+    expect($user->fresh()->hasRole('admin'))->toBeFalse();
+});
+
+test('removing superadmin from a non-last superadmin works', function () {
+    $a = userWithRole('superadmin');
+    userWithRole('superadmin');
+
+    $a->removeRole('superadmin');
+    expect($a->fresh()->isSuperadmin())->toBeFalse();
+});
+
+test('sync roles keeping superadmin works and returns the model', function () {
+    $super = userWithRole('superadmin');
+
+    expect($super->syncRoles(['superadmin']))->toBe($super);
+    expect($super->syncRoles('superadmin', 'admin')->fresh()->roles->pluck('name')->sort()->values()->all())
+        ->toBe(['admin', 'superadmin']);
+});
+
+test('sync roles recognises the superadmin role given as ids', function () {
+    $super = userWithRole('superadmin');
+    $superId = Role::findByName('superadmin')->id;
+    $adminId = Role::findByName('admin')->id;
+
+    $super->syncRoles([$superId, $adminId]);
+    expect($super->fresh()->isSuperadmin())->toBeTrue();
+
+    expect(fn () => $super->syncRoles([$adminId]))->toThrow(LogicException::class);
+    expect(fn () => $super->removeRole($superId))->toThrow(LogicException::class);
+    expect($super->fresh()->isSuperadmin())->toBeTrue();
+});
