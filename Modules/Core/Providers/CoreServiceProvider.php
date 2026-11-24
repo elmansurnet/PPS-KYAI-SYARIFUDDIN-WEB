@@ -2,6 +2,7 @@
 
 namespace Modules\Core\Providers;
 
+use InvalidArgumentException;
 use Modules\Core\Contracts\LatestNewsProvider;
 use Modules\Core\Support\NullLatestNewsProvider;
 
@@ -28,6 +29,10 @@ class CoreServiceProvider extends ModuleServiceProvider
     public function registerEnabledModules(): void
     {
         foreach ((array) config('modules.enabled', []) as $class) {
+            if (! class_exists($class)) {
+                throw new InvalidArgumentException("Provider modul tidak ditemukan: {$class} (config 'modules.enabled').");
+            }
+
             $provider = $this->app->register($class);
 
             if ($provider instanceof ModuleServiceProvider && ! in_array($provider, $this->moduleProviders, true)) {

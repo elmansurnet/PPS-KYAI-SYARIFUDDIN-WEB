@@ -41,3 +41,15 @@ test('registered filament plugins is empty when modules declare none', function 
 
     expect(app()->getProvider(CoreServiceProvider::class)->registeredFilamentPlugins())->toBe([]);
 });
+
+test('module routes run inside the web middleware group', function () {
+    enableModules([DummyServiceProvider::class]);
+
+    $route = app('router')->getRoutes()->match(Illuminate\Http\Request::create('/__dummy'));
+
+    expect($route->gatherMiddleware())->toContain('web');
+});
+
+test('enabling a missing provider class throws naming the config key', function () {
+    enableModules(['Modules\Nope\NopeServiceProvider']);
+})->throws(InvalidArgumentException::class, 'modules.enabled');

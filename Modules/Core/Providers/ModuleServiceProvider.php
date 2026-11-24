@@ -2,6 +2,7 @@
 
 namespace Modules\Core\Providers;
 
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 use ReflectionClass;
 
@@ -36,7 +37,7 @@ abstract class ModuleServiceProvider extends ServiceProvider
         }
 
         if (is_file($path.'/Routes/web.php')) {
-            $this->loadRoutesFrom($path.'/Routes/web.php');
+            Route::middleware('web')->group($path.'/Routes/web.php');
         }
 
         if (is_dir($path.'/Resources/views')) {
