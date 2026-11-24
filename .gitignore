@@ -1,0 +1,4 @@
+.env
+.superpowers/
+vendor/
+node_modules/
