@@ -214,3 +214,91 @@ test('db:seed on a fresh database gives admin the landing permissions', function
     expect($admin->can('Update:LandingSection'))->toBeTrue();
     expect(landingUserWithRole('penulis_berita')->can('ViewAny:LandingSection'))->toBeFalse();
 });
+
+test('video embed accepts known url shapes and rejects hostile ones', function () {
+    $yt = 'https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ';
+
+    foreach ([
+        'https://m.youtube.com/watch?v=dQw4w9WgXcQ',
+        'https://www.youtube.com/shorts/dQw4w9WgXcQ',
+        'HTTPS://www.youtube.com/watch?v=dQw4w9WgXcQ',
+        'https://youtu.be/dQw4w9WgXcQ',
+        'https://www.youtube.com/embed/dQw4w9WgXcQ',
+    ] as $input) {
+        expect(VideoEmbed::embedUrl($input))->toBe($yt);
+    }
+
+    expect(VideoEmbed::embedUrl('https://vimeo.com/76979871'))->toBe('https://player.vimeo.com/video/76979871');
+    expect(VideoEmbed::embedUrl('https://player.vimeo.com/video/76979871'))->toBe('https://player.vimeo.com/video/76979871');
+
+    foreach ([
+        'https://youtube.com@evil.com/',
+        'https://youtube.com@evil.com/watch?v=dQw4w9WgXcQ',
+        'data:text/html,<script>alert(1)</script>',
+        'https://www.youtube.com/watch?v=dQw4w9WgXc"',
+        'https://www.youtube.com/watch?v=dQw4w9WgXcQ%0A',
+        'https://youtu.be/dQw4w9WgXcQ%0A',
+        'https://www.youtube.com/embed/dQw4w9WgXcQ%0A',
+        'https://vimeo.com/76979871%0A',
+        'https://player.vimeo.com/video/76979871%0A',
+    ] as $input) {
+        expect(VideoEmbed::embedUrl($input))->toBeNull($input);
+    }
+});
+
+test('sections with whitespace-only body or items are not rendered', function () {
+    landingSection('hero', ['sort_order' => 1]);
+    landingSection('sejarah', ['title' => 'Sejarah Spasi', 'body' => "  \n\t ", 'sort_order' => 2]);
+    landingSection('kegiatan_unggulan', ['title' => 'Kegiatan Spasi', 'body' => ' ', 'sort_order' => 3, 'items' => [
+        ['title' => '  ', 'body' => "\n", 'image_path' => null],
+    ]]);
+
+    $this->get('/')->assertOk()->assertDontSee('Sejarah Spasi')->assertDontSee('Kegiatan Spasi');
+});
+
+test('updating items deletes replaced and removed images and tolerates null items', function () {
+    Storage::fake('public');
+    foreach (['a', 'b', 'c', 'm'] as $f) {
+        Storage::disk('public')->put("landing/items/$f.jpg", 'x');
+    }
+    $row = landingSection('kegiatan_unggulan', ['items' => [
+        ['title' => 'A', 'body' => null, 'image_path' => 'landing/items/a.jpg'],
+        ['title' => 'B', 'body' => null, 'image_path' => 'landing/items/b.jpg'],
+        ['title' => 'C', 'body' => null, 'image_path' => 'landing/items/c.jpg'],
+    ]]);
+
+    // Ganti gambar A, hapus butir B, C tidak berubah.
+    $row->update(['items' => [
+        ['title' => 'A', 'body' => null, 'image_path' => 'landing/items/a2.jpg'],
+        ['title' => 'C', 'body' => null, 'image_path' => 'landing/items/c.jpg'],
+    ]]);
+    Storage::disk('public')->assertMissing('landing/items/a.jpg');
+    Storage::disk('public')->assertMissing('landing/items/b.jpg');
+    Storage::disk('public')->assertExists('landing/items/c.jpg');
+
+    // Simpan tanpa perubahan items: tidak ada yang terhapus.
+    $row->update(['title' => 'Baru']);
+    Storage::disk('public')->assertExists('landing/items/c.jpg');
+
+    // items menjadi null: semua gambar butir terhapus.
+    $row->update(['items' => null]);
+    Storage::disk('public')->assertMissing('landing/items/c.jpg');
+
+    // items null -> terisi, lalu hapus baris.
+    $row->update(['items' => [['title' => 'D', 'body' => null, 'image_path' => 'landing/items/c.jpg']]]);
+    Storage::disk('public')->put('landing/items/c.jpg', 'x');
+    $row->update(['media_path' => 'landing/items/m.jpg']);
+    $row->delete();
+    Storage::disk('public')->assertMissing('landing/items/c.jpg');
+    Storage::disk('public')->assertMissing('landing/items/m.jpg');
+});
+
+test('clearing media_path deletes the old file', function () {
+    Storage::fake('public');
+    Storage::disk('public')->put('landing/lama.jpg', 'x');
+    $row = landingSection('hero', ['media_path' => 'landing/lama.jpg']);
+
+    $row->update(['media_path' => null]);
+
+    Storage::disk('public')->assertMissing('landing/lama.jpg');
+});

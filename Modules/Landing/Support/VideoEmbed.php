@@ -11,7 +11,7 @@ class VideoEmbed
 {
     private const YOUTUBE_HOSTS = ['youtube.com', 'www.youtube.com', 'm.youtube.com', 'youtube-nocookie.com', 'www.youtube-nocookie.com'];
 
-    private const YOUTUBE_ID = '/^[A-Za-z0-9_-]{11}$/';
+    private const YOUTUBE_ID = '/^[A-Za-z0-9_-]{11}\z/';
 
     public static function embedUrl(?string $url): ?string
     {
@@ -34,7 +34,7 @@ class VideoEmbed
         if (in_array($host, self::YOUTUBE_HOSTS, true)) {
             $id = match (true) {
                 $path === '/watch' => is_string($query['v'] ?? null) ? $query['v'] : null,
-                (bool) preg_match('#^/(?:embed|shorts|live)/([^/]+)/?$#', $path, $m) => $m[1],
+                (bool) preg_match('#^/(?:embed|shorts|live)/([^/]+)/?\z#', $path, $m) => $m[1],
                 default => null,
             };
 
@@ -46,11 +46,11 @@ class VideoEmbed
         }
 
         if (in_array($host, ['vimeo.com', 'www.vimeo.com'], true)
-            && preg_match('#^/(\d{5,12})/?$#', $path, $m)) {
+            && preg_match('#^/(\d{5,12})/?\z#', $path, $m)) {
             return 'https://player.vimeo.com/video/'.$m[1];
         }
 
-        if ($host === 'player.vimeo.com' && preg_match('#^/video/(\d{5,12})/?$#', $path, $m)) {
+        if ($host === 'player.vimeo.com' && preg_match('#^/video/(\d{5,12})/?\z#', $path, $m)) {
             return 'https://player.vimeo.com/video/'.$m[1];
         }
 

@@ -64,7 +64,7 @@ class LandingSection extends Model
             }
 
             if ($section->wasChanged('items')) {
-                $old = self::itemImages(json_decode((string) $section->getOriginal('items'), true));
+                $old = self::itemImages($section->getOriginal('items'));
                 $new = self::itemImages($section->items);
                 self::deleteFiles(array_diff($old, $new));
             }

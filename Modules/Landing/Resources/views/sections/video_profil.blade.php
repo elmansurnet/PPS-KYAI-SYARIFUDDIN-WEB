@@ -13,7 +13,7 @@
             <div class="aspect-video w-full overflow-hidden rounded-card bg-ink-100 ring-1 ring-ink-200">
                 <iframe src="{{ $embed }}" title="Video profil: {{ $title }}" class="size-full" loading="lazy"
                         referrerpolicy="strict-origin-when-cross-origin"
-                        allow="accelerometer; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+                        allow="accelerometer; encrypted-media; gyroscope; picture-in-picture"
                         allowfullscreen></iframe>
             </div>
         </div>
