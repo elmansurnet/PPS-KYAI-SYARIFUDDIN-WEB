@@ -2,6 +2,7 @@
 
 namespace Modules\Core\Providers;
 
+use Filament\Contracts\Plugin;
 use InvalidArgumentException;
 use Modules\Core\Contracts\LatestNewsProvider;
 use Modules\Core\Support\NullLatestNewsProvider;
@@ -44,7 +45,7 @@ class CoreServiceProvider extends ModuleServiceProvider
     /**
      * Plugin Filament dari semua modul aktif (untuk panel admin).
      *
-     * @return array<int, object>
+     * @return array<int, Plugin>
      */
     public function registeredFilamentPlugins(): array
     {

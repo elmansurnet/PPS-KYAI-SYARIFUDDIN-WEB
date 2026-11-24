@@ -2,6 +2,7 @@
 
 namespace Modules\Core\Providers;
 
+use Filament\Contracts\Plugin;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 use ReflectionClass;
@@ -12,18 +13,13 @@ abstract class ModuleServiceProvider extends ServiceProvider
 
     /**
      * Plugin Filament modul, bila ada panel admin.
-     *
-     * Tipe kembalian sebenarnya \Filament\Contracts\Plugin|null. Dideklarasikan
-     * ?object agar kelas ini tetap bisa dimuat saat Filament belum terpasang.
-     *
-     * @return \Filament\Contracts\Plugin|null
      */
-    protected function filamentPlugin(): ?object
+    protected function filamentPlugin(): ?Plugin
     {
         return null;
     }
 
-    public function getFilamentPlugin(): ?object
+    public function getFilamentPlugin(): ?Plugin
     {
         return $this->filamentPlugin();
     }
