@@ -61,6 +61,19 @@ return [
             'report' => false,
         ],
 
+        /*
+         * Tujuan cadangan (spatie/laravel-backup, config/backup.php). Di luar public/ dan di luar root disk lain.
+         * Arsipnya terenkripsi sandi, tetapi tetap salin keluar server dan jangan pernah dilayani lewat web.
+         */
+        'backups' => [
+            'driver' => 'local',
+            'root' => storage_path('app/backups'),
+            'visibility' => 'private',
+            'serve' => false,
+            'throw' => true,
+            'report' => false,
+        ],
+
         's3' => [
             'driver' => 's3',
             'key' => env('AWS_ACCESS_KEY_ID'),
