@@ -71,3 +71,13 @@ test('manual backup:run refuses in production without an archive password', func
     config(['backup.backup.password' => null]);
     expect(fn () => event($event()))->not->toThrow(RuntimeException::class);
 });
+
+test('activity log is cleaned daily with a one year retention', function () {
+    expect(config('activitylog.delete_records_older_than_days'))->toBe(365);
+
+    $event = collect(app(Schedule::class)->events())
+        ->first(fn ($e) => str_contains((string) $e->command, 'activitylog:clean'));
+
+    expect($event)->not->toBeNull()
+        ->and($event->expression)->toBe('30 3 * * *');
+});

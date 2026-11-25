@@ -22,3 +22,9 @@ Schedule::call(function () use ($backupReady) {
         Log::error('Cadangan tidak berjalan: BACKUP_ARCHIVE_PASSWORD kosong.');
     }
 })->dailyAt('02:00')->name('backup-password-check');
+
+/*
+ * Log aktivitas admin (spatie/laravel-activitylog) dibersihkan harian; retensi dari
+ * config('activitylog.delete_records_older_than_days') = 365 hari.
+ */
+Schedule::command('activitylog:clean --force')->dailyAt('03:30')->withoutOverlapping()->onOneServer();

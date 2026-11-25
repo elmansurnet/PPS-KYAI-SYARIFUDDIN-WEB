@@ -23,6 +23,9 @@
     </source>
     <php>
         <env name="APP_ENV" value="testing"/>
+        <env name="APP_LOCALE" value="id"/>
+        <env name="APP_FALLBACK_LOCALE" value="en"/>
+        <env name="LOG_LEVEL" value="debug"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="NIK_HMAC_KEY" value="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
@@ -34,6 +37,9 @@
         <env name="MAIL_MAILER" value="array"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>
+        <!-- .env.example (dipakai CI) bernilai produksi; tes berjalan lewat http://localhost. -->
+        <env name="SESSION_SECURE_COOKIE" value="false"/>
+        <env name="SESSION_ENCRYPT" value="false"/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>
