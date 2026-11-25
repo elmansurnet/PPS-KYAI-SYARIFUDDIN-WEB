@@ -47,6 +47,20 @@ return [
             'report' => false,
         ],
 
+        /*
+         * File kartu keluarga pendaftar (modul Pendaftaran). Driver 'kk_private' didaftarkan oleh
+         * PendaftaranServiceProvider: disk lokal tanpa URL publik maupun URL sementara (url() melempar
+         * pengecualian) dan tidak pernah dilayani route storage. Isi file selalu terenkripsi (KkStorage).
+         * Root WAJIB di luar public/.
+         */
+        'kk' => [
+            'driver' => 'kk_private',
+            'root' => storage_path('app/private/kk'),
+            'visibility' => 'private',
+            'throw' => true,
+            'report' => false,
+        ],
+
         's3' => [
             'driver' => 's3',
             'key' => env('AWS_ACCESS_KEY_ID'),
