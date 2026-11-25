@@ -14,11 +14,11 @@ Keputusan saya (usulan, dapat diubah, bukan kesepakatan): Filament untuk admin; 
 
 ## Perintah
 
-- `composer test` : jalankan semua tes (Pest).
+- `composer test` : jalankan SEMUA tes (Pest). Lambat di mesin berRAM kecil (bisa berjam-jam); saat bekerja jalankan tes terfokus: `php artisan test Modules/Core/Tests tests/Feature/ProductionSafetyTest.php --compact`. Tes memakai SQLite di memori (phpunit.xml). `composer.json` mengatur `process-timeout: 0`.
 - `composer security` : `composer audit` + `npm audit --audit-level=high`. Harus bersih sebelum rilis.
-- `npm run build` : build aset front-end.
-
-Perintah ini dibuat di Task 2/13 rencana; bila belum ada, proyek belum selesai di-scaffold.
+- `npm run build` : build aset front-end. Jalankan SEBELUM tes pada checkout baru/CI (`PublicLayoutTest` membaca manifest Vite di `public/build`).
+- `php artisan shield:generate --all --panel=admin --option=permissions` : buat izin Shield setelah menambah resource. SELALU dengan `--option=permissions`; opsi lain menimpa policy kustom.
+- Deploy, cadangan, dan pemulihan: `docs/DEPLOY-aapanel.md`. CI: `.github/workflows/ci.yml`.
 
 ## Struktur modul
 
@@ -55,15 +55,15 @@ Modul: Core (inti, kontrak, pengaturan situs, role, keamanan), Landing, Berita, 
 ## Keamanan wajib (spec bagian 5)
 
 - NIK santri: dienkripsi (enkripsi bawaan Laravel) + hash HMAC terpisah untuk cek duplikat dan pencarian. Jangan simpan NIK polos; jangan cukup dengan hash.
-- File KK: disk privat, dienkripsi, nama file diacak, tanpa URL publik; diunduh hanya lewat route yang mengecek login dan izin.
+- File KK: disk privat `kk` di `storage/app/kk` (di luar root disk lain), dienkripsi, nama file diacak, tanpa URL publik; diunduh hanya lewat route yang mengecek login dan izin (attachment, nosniff, CSP sandbox). PDF dengan konten aktif ditolak.
 - Data lain tidak dienkripsi tetapi hanya tampil untuk role yang berhak.
-- `APP_KEY` wajib dicadangkan aman; bila hilang, NIK dan KK tidak bisa dibuka.
+- `APP_KEY` wajib dicadangkan aman; bila hilang, NIK dan KK tidak bisa dibuka. Simpan `APP_KEY`, `NIK_HMAC_KEY`, dan `BACKUP_ARCHIVE_PASSWORD` terpisah dari cadangan.
 - Jalankan `composer security` sebelum rilis; build gagal bila ada kerentanan. Pakai hanya versi yang masih didukung keamanannya.
 - Validasi upload ketat: jenis, ukuran, dan isi file (bukan hanya ekstensi).
 - Rate limiting pada formulir pendaftaran dan login admin, plus Cloudflare Turnstile.
 - Header keamanan (CSP, HSTS, dan sejenisnya); `APP_DEBUG=false` di produksi.
 - Log aktivitas admin, termasuk siapa melihat dan mengekspor data pendaftar.
-- Cadangan berkala database dan file, terenkripsi.
+- Cadangan harian database + `storage/app/kk` + `storage/app/public`, zip terenkripsi sandi (`spatie/laravel-backup`, `config/backup.php`, jadwal di `routes/console.php`).
 - Jangan klaim "lolos semua"; laporkan hasil tes dan audit apa adanya.
 
 ## Pedoman UI (spec bagian 6)
