@@ -38,8 +38,11 @@ Panduan ini untuk server lokal/VPS dengan aaPanel (Nginx + PHP-FPM + MySQL) yang
    location ~ /\.(?!well-known) { deny all; }
    location ~ ^/(vendor|bootstrap|config|database|Modules|tests|resources|routes|app)/ { deny all; }
    location ~ ^/storage/(app|framework|logs)/ { deny all; }
+   location ~* ^/storage/.*\.php$ { deny all; }   # letakkan SEBELUM blok `location ~ \.php$` (fastcgi)
    location ~* ^/(composer\.(json|lock)|artisan|package(-lock)?\.json)$ { deny all; }
    ```
+
+   Aturan `^/storage/.*\.php$` mencegah berkas `.php` yang entah bagaimana terunggah ke `public/storage` dieksekusi PHP-FPM (nginx memilih regex pertama yang cocok, jadi aturan ini harus berada sebelum handler fastcgi).
 
    **Jangan memblokir `/storage/` secara menyeluruh**: `storage:link` membuat `public/storage` (isi `storage/app/public`) yang melayani logo, gambar berita, galeri, dan PDF biaya; hanya `app`, `framework`, dan `logs` yang ditolak. Perlindungan utamanya adalah root Nginx = `public/`: folder di luar `public/` memang tidak terjangkau web; aturan di atas hanya lapis kedua (dotfile seperti `.env` sudah ditolak aturan pertama). Jangan pernah menaruh `.env`, cadangan, atau ekspor di dalam `public/`. Jangan memblokir ekstensi umum (`.json`, `.md`, `.zip`) secara global, karena bisa mematikan berkas unggahan yang sah.
 5. Origin hanya untuk tunnel (bagian 7): Nginx **harus** mendengarkan `127.0.0.1` saja (mis. `listen 127.0.0.1:80;`) atau port 80/443 diblokir dari luar oleh firewall.
@@ -97,15 +100,18 @@ Catatan:
 
 **Jalankan semua perintah `composer`/`php artisan` sebagai user `www`, bukan root** (root membuat berkas milik root di `storage/` dan `bootstrap/cache/` yang tidak bisa ditulis PHP-FPM). Di aaPanel `www` tidak punya shell login, jadi pakai `sudo -u www -H <perintah>`; PHP aaPanel ada di `/www/server/php/83/bin/php` (pola `/www/server/php/<versi tanpa titik>/bin/php`). Di bawah, `php` berarti `sudo -u www -H /www/server/php/83/bin/php` dan `composer` berarti `sudo -u www -H /www/server/php/83/bin/php /usr/bin/composer`. Bila ada yang pernah dijalankan sebagai root: `chown -R www:www storage bootstrap/cache`.
 
+Variabel lingkungan untuk satu perintah harus lewat `env` setelah `sudo` (`sudo -u www -H env VAR=nilai ...`), bukan sebagai awalan sebelum `sudo`. Hanya langkah 2 yang memerlukannya; langkah lain membaca `.env`. Bila `sudo` tidak terpasang, cadangan (fallback): `su -s /bin/bash www -c 'cd /www/wwwroot/pps && CACHE_STORE=array /www/server/php/83/bin/php /usr/bin/composer install --no-dev --optimize-autoloader'`.
+
 Urutan (tiap langkah bergantung pada langkah sebelumnya):
 
 ```bash
 cd /www/wwwroot/pps
 cp .env.example .env               # 1. buat dan ISI .env dulu sesuai bagian 3 (APP_KEY dibiarkan kosong)
 chown www:www .env && chmod 640 .env
-CACHE_STORE=array composer install --no-dev --optimize-autoloader
+sudo -u www -H env CACHE_STORE=array /www/server/php/83/bin/php /usr/bin/composer install --no-dev --optimize-autoloader
                                    # 2. hook post-autoload-dump menjalankan filament:upgrade yang memakai cache;
-                                   #    CACHE_STORE=array menghindari butuh tabel cache sebelum migrasi
+                                   #    CACHE_STORE=array menghindari butuh tabel cache sebelum migrasi.
+                                   #    `env` WAJIB: awalan VAR=nilai sebelum sudo dibuang sudo (env_reset).
 npm ci && npm run build            # 3. atau build di mesin lain dan salin public/build
 php artisan key:generate           # 4. SEKALI SAJA. Menjalankannya lagi membuat data terenkripsi tak terbaca.
 php artisan migrate --force        # 5. buat tabel (termasuk cache dan sesi)
