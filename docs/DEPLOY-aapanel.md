@@ -12,8 +12,8 @@ Panduan ini untuk server lokal/VPS dengan aaPanel (Nginx + PHP-FPM + MySQL) yang
 - Node 22 hanya untuk build aset (boleh di mesin lain, lalu salin `public/build`).
 - `cloudflared` terpasang di host yang sama.
 - Pengaturan PHP (aaPanel: App Store > PHP 8.3 > Setting > Configuration):
-  - `upload_max_filesize = 8M` dan `post_max_size = 8M` (file KK maks 2 MB; nilai harus di atasnya).
-  - `memory_limit = 256M` atau lebih (ekspor PDF).
+  - `upload_max_filesize = 8M` dan `post_max_size = 8M` (file KK maks 5 MB; nilai harus di atasnya).
+  - `memory_limit = 256M` atau lebih (ekspor PDF; enkripsi file KK 5 MB memakai kurang dari 25 MB per permintaan).
   - `max_execution_time = 120` atau lebih (ekspor Excel/PDF).
   - `expose_php = Off`.
   - `request_terminate_timeout` PHP-FPM jangan lebih kecil dari `max_execution_time`.
@@ -54,6 +54,8 @@ APP_NAME="PPs Kyai Syarifuddin"
 APP_ENV=production
 APP_DEBUG=false
 APP_TIMEZONE=Asia/Jakarta                   # jadwal cadangan 02:00 mengikuti zona ini
+APP_LOCALE=id                               # antarmuka dan pesan validasi berbahasa Indonesia (lang/id)
+APP_FALLBACK_LOCALE=en                      # kunci yang belum diterjemahkan tampil sebagai teks Inggris, bukan kunci mentah
 APP_URL=https://pendaftaran.contoh.sch.id   # WAJIB: URL HTTPS publik, tanpa slash akhir
 APP_KEY=                                    # php artisan key:generate (SEKALI, bagian 4)
 
@@ -94,7 +96,8 @@ Catatan:
 
 - `APP_URL` menentukan host tepercaya (`TrustHosts` hanya mengizinkan host ini, tanpa subdomain atau `www`) dan memaksa skema/URL akar. Salah isi = situs menolak permintaan atau tautan salah.
 - `.env` berizin `640`, pemilik user web; tidak masuk git; tidak ada di `public/`.
-- Jangan menaruh nilai nyata di `.env.example`.
+- Jangan menaruh nilai nyata di `.env.example`. Nilai bawaannya sudah sama dengan blok di atas (produksi);
+  untuk pengembangan lokal ubah ke `APP_ENV=local`, `APP_DEBUG=true`, `SESSION_SECURE_COOKIE=false`, `LOG_LEVEL=debug`.
 
 ## 4. Pemasangan pertama
 
@@ -115,8 +118,8 @@ sudo -u www -H env CACHE_STORE=array /www/server/php/83/bin/php /usr/bin/compose
 npm ci && npm run build            # 3. atau build di mesin lain dan salin public/build
 php artisan key:generate           # 4. SEKALI SAJA. Menjalankannya lagi membuat data terenkripsi tak terbaca.
 php artisan migrate --force        # 5. buat tabel (termasuk cache dan sesi)
-php artisan db:seed --force        # 6. RoleSeeder (role + superadmin), lalu seeder modul (Landing, Berita, Pendaftaran + data master)
-php artisan shield:generate --all --panel=admin --option=permissions   # 7. izin Shield
+php artisan shield:generate --all --panel=admin --option=permissions   # 6. izin Shield (SEBELUM seed, lihat catatan)
+php artisan db:seed --force        # 7. RoleSeeder (role + superadmin + izin admin), lalu seeder modul (Landing, Berita, Pendaftaran + data master awal)
 php artisan filament:upgrade       # 8. publikasi aset Filament
 php artisan storage:link           # 9. hanya untuk storage/app/public (gambar situs/berita)
 php artisan optimize               # 10. config, route, view, event cache
@@ -126,6 +129,8 @@ Catatan:
 
 - `--optimize-autoloader` pernah menggantung di mesin pengembangan; di server produksi seharusnya normal. Bila menggantung, jalankan `composer dump-autoload -o` terpisah.
 - **Jangan** menjalankan `shield:generate` tanpa `--option=permissions`: opsi lain menimpa policy yang sudah disesuaikan (mis. `UserPolicy`).
+- `shield:generate` dijalankan sebelum seed supaya RoleSeeder memberi admin SEMUA izin fitur yang ada (termasuk izin hasil Shield). Bila urutannya terbalik, cukup jalankan `php artisan db:seed --class="Modules\Core\Database\Seeders\RoleSeeder" --force` sekali lagi.
+- **Aturan seeder (penting untuk pembaruan):** izin bawaan diberikan ke role SEKALI per pasangan (role, izin) dan dicatat di tabel `seeded_role_permissions`. Menjalankan seeder lagi tidak pernah mencabut izin dan tidak memberi ulang izin yang sudah dicabut superadmin dari panel; hanya izin baru (fitur baru) yang ditambahkan sekali. Data master pendaftaran (jenjang, kelas, pendidikan terakhir) hanya diisi bila tabelnya masih kosong; setelah itu dikelola admin.
 - Setelah seed pertama berhasil, **hapus `SUPERADMIN_EMAIL` dan `SUPERADMIN_PASSWORD` dari `.env`**, lalu `php artisan config:cache`.
 - Jalankan `php artisan optimize:clear && php artisan optimize` setiap `.env` berubah.
 - Izin berkas: `chown -R www:www storage bootstrap/cache` dan `chmod -R ug+rwX storage bootstrap/cache` (ulangi bila sesuatu pernah dijalankan sebagai root).
@@ -139,7 +144,7 @@ Cadangan harian berjalan lewat penjadwal Laravel. Tambahkan cron (aaPanel: Cron 
 cd /www/wwwroot/pps && sudo -u www /www/server/php/83/bin/php artisan schedule:run >> /dev/null 2>&1
 ```
 
-Periksa dengan `php artisan schedule:list` (harus tampil `backup:run` 02:00, `backup:clean` 02:30, `backup:monitor` 03:00). Cadangan hanya berjalan bila `BACKUP_ARCHIVE_PASSWORD` terisi; tanpa sandi arsip tidak terenkripsi, jadi sengaja ditolak dan dicatat ke log.
+Periksa dengan `php artisan schedule:list` (harus tampil `backup:run` 02:00, `backup:clean` 02:30, `backup:monitor` 03:00, `activitylog:clean` 03:30; yang terakhir menghapus log aktivitas admin yang lebih tua dari 365 hari, `config/activitylog.php`). Cadangan hanya berjalan bila `BACKUP_ARCHIVE_PASSWORD` terisi; tanpa sandi arsip tidak terenkripsi, jadi sengaja ditolak dan dicatat ke log.
 
 ## 6. Pembaruan dan rollback
 
@@ -156,12 +161,15 @@ composer install --no-dev --optimize-autoloader
 npm ci && npm run build
 php artisan migrate --force
 php artisan filament:upgrade
-# Bila rilis menambah resource/modul: buat izin lalu beri ke role lewat seeder
+# Hanya bila rilis menambah resource/izin/modul (lihat catatan rilis):
 php artisan shield:generate --all --panel=admin --option=permissions
-php artisan db:seed --force        # seeder bersifat idempoten (firstOrCreate); atau --class=<seeder modul> saja
+php artisan db:seed --class="Modules\Core\Database\Seeders\RoleSeeder" --force   # izin baru untuk admin
+php artisan db:seed --class="<seeder izin modul baru>" --force                     # mis. Modules\Berita\Database\Seeders\BeritaSeeder
 php artisan optimize:clear && php artisan optimize
 php artisan up
 ```
+
+Seeder aman dijalankan ulang dan tidak menimpa pengaturan role dari panel (izin yang dicabut superadmin tetap tercabut; lihat "Aturan seeder" di bagian 4), tetapi tidak perlu dijalankan pada pembaruan biasa. Jangan menjalankan `db:seed` tanpa `--class` hanya untuk "berjaga-jaga".
 
 Rollback: `php artisan down`, kembalikan kode ke rilis yang dicatat sebelum pembaruan (`git checkout <tag>` lalu `composer install --no-dev`), bila migrasi baru merusak data pulihkan database dari cadangan (bagian 9), lalu `optimize` dan `up`. Jangan pernah mengubah `APP_KEY` saat rollback.
 
@@ -178,7 +186,8 @@ Rollback: `php artisan down`, kembalikan kode ke rilis yang dicatat sebelum pemb
 - SSL/TLS **Full (strict)**, **Always Use HTTPS** aktif, Automatic HTTPS Rewrites aktif, TLS minimum 1.2.
 - **HSTS**: aplikasi mengirim `Strict-Transport-Security` dengan `includeSubDomains`. Situs harus hidup di subdomainnya sendiri, atau seluruh domain apex dan subdomain lain sudah penuh HTTPS; jika tidak, subdomain HTTP lain tak terjangkau di browser yang pernah membuka situs ini.
 - **WAF/Rate limiting**: batasi `POST /daftar/*`, seluruh `/admin*`, dan `POST /livewire*` (mis. 20 permintaan per menit per IP lalu challenge/block). Catatan: form login Filament tidak mengirim POST ke `/admin/login`, melainkan ke `/livewire-<hash>/update`, jadi aturan khusus `/admin/login` tidak efektif; pembatas laju aplikasi (5 percobaan per menit) tetap kontrol utama. Blokir path `/.env`, `/.git/`, `/vendor/`, `/storage/app/`, `/storage/logs/` sebagai lapis tambahan (jangan blokir `/storage/` seluruhnya: itu jalur gambar, galeri, dan PDF biaya). Aplikasi sudah punya pembatas laju sendiri (login admin 5 percobaan per menit per IP; pendaftaran 3 per menit per IP+sesi, 10 per menit dan 30 per jam per IP).
-- **Turnstile**: buat widget (Managed) untuk host publik; salin site key dan secret ke `.env`.
+- **Turnstile**: buat widget (Managed) untuk host publik; salin site key dan secret ke `.env`. Turnstile hanya ada di formulir pendaftaran publik, **tidak** di login admin.
+- **Cloudflare Access untuk admin (sangat disarankan)**: di Zero Trust > Access > Applications buat aplikasi self-hosted untuk host publik dengan path `/admin*` dan `/livewire*`, kebijakan Allow hanya untuk surel pengurus/panitia (One-time PIN atau login Google). Login admin tidak memakai Turnstile dan hanya dibatasi 5 percobaan per menit per IP; Access menambah lapis identitas sebelum halaman login terjangkau. Perhatikan: form publik tidak memakai Livewire, jadi menutup `/livewire*` tidak mengganggu pendaftaran; unduh KK (`/admin/pendaftar/*/kk`) ikut terlindungi. Uji setelah mengaktifkan: buka `/admin` dari jendela penyamaran harus memunculkan layar Access.
 - Bot Fight Mode boleh aktif; pastikan tidak menantang `/up` dan unduhan admin.
 
 ## 8. Cadangan
@@ -255,7 +264,7 @@ Setelah masuk `/admin` sebagai superadmin:
 
 1. **Pengaturan situs** (`/admin/manage-site-settings`): nama pondok, logo, kontak, alamat, nomor WhatsApp panitia, tautan sosial, **PDF rincian biaya**, status penerimaan.
 2. **Bagian landing** (Landing Sections): hero, profil, video profil, galeri; ganti isi contoh dengan foto/teks/video asli.
-3. **Data master pendaftaran**: jenjang, kelas per jenjang, pendidikan terakhir (aktifkan/nonaktifkan yang relevan).
+3. **Data master pendaftaran**: jenjang, kelas per jenjang, pendidikan terakhir (aktifkan/nonaktifkan yang relevan). Isi awal hanya dibuat sekali saat instalasi; perubahan dan penghapusan dari admin tidak dibatalkan oleh seeder.
 4. **Berita**: kategori dan beberapa tulisan awal.
-5. **Pengguna dan role**: buat akun panitia/penulis; ganti sandi superadmin awal; jangan membagikan akun superadmin.
+5. **Pengguna dan role**: buat akun panitia/penulis; ganti sandi superadmin awal; jangan membagikan akun superadmin. Izin tiap role diatur di Shield > Roles (termasuk izin khusus: ekspor, lihat NIK lengkap, unduh KK, kelola semua berita, pengaturan situs). Role `superadmin` tidak dapat diganti nama atau dihapus.
 6. Uji alur pendaftaran dari ponsel, lalu hapus data uji dari admin.

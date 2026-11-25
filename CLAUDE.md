@@ -10,7 +10,7 @@ Website PPs Kyai Syarifuddin (pesantren): landing page, berita, dan pendaftaran 
 
 Keputusan pemilik: Laravel, admin panel untuk semua pengaturan, arsitektur modular, mobile first, modul buatan sendiri (bukan paket modul), hosting aaPanel + Cloudflare Tunnel (bisa pindah ke VPS).
 
-Keputusan saya (usulan, dapat diubah, bukan kesepakatan): Filament untuk admin; Spatie Permission + Filament Shield untuk role/izin; Blade + Tailwind CSS untuk tampilan publik; Livewire atau Alpine untuk wizard pendaftaran; ekspor Excel/PDF langsung tanpa queue. Pengujian memakai Pest. Versi PHP/Laravel/Filament dipilih yang masih mendapat dukungan keamanan, dibuktikan dengan `composer audit`.
+Keputusan saya (usulan, dapat diubah, bukan kesepakatan): Filament untuk admin; Spatie Permission + Filament Shield untuk role/izin; Blade + Tailwind CSS untuk tampilan publik; wizard pendaftaran server-rendered tanpa JavaScript/Livewire/Alpine (CSP publik ketat, HP Android lama); ekspor Excel/PDF langsung tanpa queue. Pengujian memakai Pest. Versi PHP/Laravel/Filament dipilih yang masih mendapat dukungan keamanan, dibuktikan dengan `composer audit`.
 
 ## Perintah
 
@@ -38,7 +38,8 @@ Modul: Core (inti, kontrak, pengaturan situs, role, keamanan), Landing, Berita, 
 ## Aturan modul
 
 1. Modul tidak boleh memanggil kelas modul lain. Komunikasi hanya lewat kontrak (interface) atau event yang didaftarkan di Core (`Modules\Core\Contracts\...`).
-2. Modul yang membutuhkan data modul lain memakai kontrak Core. Contoh: Landing membaca berita lewat `LatestNewsProvider`; Core mengikat implementasi kosong sampai Berita menggantinya.
+2. Modul yang membutuhkan data modul lain memakai kontrak Core. Contoh: Landing membaca berita lewat `LatestNewsProvider` (elemen `NewsItem`); Core mengikat implementasi kosong sampai Berita menggantinya.
+   Tautan publik antarmodul lewat registri `Modules\Core\Support\Navigation`: tiap modul mendaftarkan item navigasinya di `boot()` (Core hanya `beranda`); modul lain memakai `Navigation::path('kunci')`/`has()` dan menyembunyikan tautan bila modulnya nonaktif. Jangan menulis path modul lain (mis. `/daftar`) langsung.
 3. Provider modul mewarisi `Modules\Core\Providers\ModuleServiceProvider` (memuat migrasi, route, view, dan plugin Filament otomatis).
 4. Tes modul ada di `Modules/<Nama>/Tests`.
 
@@ -49,8 +50,8 @@ Modul: Core (inti, kontrak, pengaturan situs, role, keamanan), Landing, Berita, 
 3. Tambahkan migrasi di `Database/Migrations`, model di `Models`, route di `Routes/web.php`, view di `Resources/views`.
 4. Bila perlu data dari modul lain, tambahkan kontrak di `Modules/Core/Contracts` dan ikat di Core; jangan impor kelas modul lain.
 5. Daftarkan kelas provider di `config/modules.php`.
-6. Tambahkan izin (Shield) dan atur role lewat seeder Core; admin/superadmin mengatur sisanya dari panel.
-7. Tulis tes di `Modules/<Nama>/Tests` (termasuk tes bahwa modul tetap jalan bila modul lain dinonaktifkan), lalu jalankan `composer test` dan `composer security`.
+6. Izin: buat seeder izin modul (`Database/Seeders/<Nama>Seeder.php`) yang memberi izin bawaan lewat `Modules\Core\Support\DefaultPermissions::grantOnce()` (sekali per role+izin; jangan `syncPermissions`, jangan mencabut izin), lalu panggil dari `database/seeders/DatabaseSeeder.php` di dalam pemeriksaan modul aktif. Izin khusus di luar aksi bawaan Shield WAJIB didaftarkan di `config/filament-shield.php` (`resources.manage` atau `custom_permissions`) agar tampil di editor role; bila tidak, menyimpan role menghapusnya. Admin/superadmin mengatur sisanya dari panel.
+7. Tulis tes di `Modules/<Nama>/Tests`, termasuk tes bahwa modul tetap jalan bila modul lain dinonaktifkan (boot aplikasi tes hanya dengan modul tertentu lewat `Tests\TestCase::$modulesOverride`; contoh `Modules/Landing/Tests/LandingWithoutOtherModulesTest.php`), lalu jalankan `composer test` dan `composer security`.
 
 ## Keamanan wajib (spec bagian 5)
 

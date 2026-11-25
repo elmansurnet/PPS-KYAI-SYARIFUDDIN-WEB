@@ -26,7 +26,7 @@ dan banyak pengguna memakai HP Android lama. Satu-satunya skrip adalah widget Tu
 | `GET /daftar/langkah/{2-4}` | `daftar.langkah` | langkah 2 (akademik), 3 (orang tua/wali), 4 (KK + Turnstile + ringkasan) |
 | `POST /daftar/langkah/{1-3}` | `daftar.simpan` | validasi satu langkah (FormRequest per langkah), simpan ke draf, 303 ke langkah berikut; `aksi=kembali` menyimpan isian mentah lalu ke langkah sebelumnya |
 | `POST /daftar/kirim` | `daftar.kirim` | validasi ulang SELURUH draf + KK + Turnstile, lalu `RegisterApplicant::handle()` |
-| `GET /daftar/terima-kasih` | `daftar.selesai` | butuh flash sekali pakai; tanpa flash diarahkan ke `/daftar` |
+| `GET /daftar/terima-kasih` | `daftar.selesai` | butuh data pendaftaran baru di sesi (nama + 4 digit akhir NIK, terenkripsi) yang berlaku `DONE_TTL_MINUTES` (10) menit, jadi halaman bisa dimuat ulang tanpa kehilangan tombol WhatsApp; kedaluwarsa atau membuka `/daftar` lagi menghapusnya; tanpa data diarahkan ke `/daftar` |
 
 Langkah yang belum boleh dibuka (langkah sebelumnya belum sah) diarahkan ke langkah pertama yang belum lengkap.
 Semua halaman `Cache-Control: no-store, private`.
@@ -65,9 +65,12 @@ pekerjaan wajib. Keduanya meninggal: wali (nama, pekerjaan, HP, alamat) wajib, H
 - Nama `YYYY/MM/<ulid>.kk`; nama dan ekstensi asli tidak dipakai.
 - Isi: `Crypt::encryptString(json_encode({"v":1,"mime":"...","data":"<base64>"}))`. `contents()` mengembalikan
   byte asli, `mime()` MIME yang terdeteksi saat disimpan (untuk unduhan Task 12), `delete()`.
-- Hanya JPEG/PNG/PDF, maks `pendaftaran.kk_max_kb` (2048 KB). Isi diperiksa `KkFileInspector`: finfo,
+- Hanya JPEG/PNG/PDF, maks `pendaftaran.kk_max_kb` (5120 KB = 5 MB; foto KK dari kamera ponsel umumnya 2-5 MB).
+  File dienkripsi utuh di memori (puncak sekitar 3-4x ukuran file, kurang dari 25 MB untuk 5 MB). Isi diperiksa `KkFileInspector`: finfo,
   tanda tangan biner + `getimagesize` untuk gambar, `%PDF-` dan `%%EOF` untuk PDF, tolak penanda `<?php`,
-  `<script`, `<html`. Pastikan `upload_max_filesize`/`post_max_size` PHP di server di atas batas ini (mis. 8M).
+  `<script`, `<html`; PDF berkonten aktif (`/JavaScript`, `/OpenAction`, `/Launch`, dan sejenisnya) ditolak.
+  Pastikan `upload_max_filesize`/`post_max_size` PHP di server di atas batas ini (8M). Unggahan yang ditolak PHP
+  (melebihi `upload_max_filesize`) memunculkan pesan `kk.uploaded` berbahasa Indonesia.
 - `RegisterApplicant`: cek duplikat -> simpan file -> transaksi (pendaftar + audit `pendaftaran.baru` berisi
   id saja). Gagal di transaksi: file dihapus. Duplikat (termasuk balapan, via `isDuplicateNikViolation`) ->
   pesan ramah tanpa info pendaftar lama. Log hanya pesan tetap + nama kelas pengecualian.
@@ -92,9 +95,17 @@ diketik tidak masuk riwayat peramban, log akses, atau header Referer. Saringan/u
 | `DownloadKk:Applicant` | ya | ya | - |
 | `Delete:Applicant`, `DeleteAny:Applicant` | ya | - | - |
 
-superadmin lewat `Gate::before`. `PendaftaranSeeder` hanya menambah izin (idempoten, cache izin dibersihkan
-sebelum dan sesudah). Hapus massal memakai `authorizeIndividualRecords('delete')`. Menghapus pendaftar ikut
-menghapus file KK-nya.
+superadmin lewat `Gate::before`. Izin khusus `Export`, `RevealNik`, dan `DownloadKk` didaftarkan ke Shield di
+`config/filament-shield.php` (`resources.manage` untuk `ApplicantResource`), sehingga tampil di editor role dan
+tidak hilang saat superadmin menyimpan role.
+
+`PendaftaranSeeder` memberi izin bawaan lewat `DefaultPermissions::grantOnce` (Core): setiap pasangan (role, izin)
+diberikan SEKALI dan dicatat di tabel `seeded_role_permissions`. Menjalankan seeder lagi tidak memberi ulang izin
+yang sudah dicabut superadmin dari panel dan tidak pernah mencabut izin; hanya izin baru yang belum pernah
+diberikan yang ditambahkan. Cache izin dibersihkan sebelum dan sesudah. `MasterDataSeeder` hanya mengisi tabel
+jenjang/kelas dan pendidikan terakhir yang masih KOSONG (instalasi baru); setelah itu data master dikelola admin,
+dan baris yang dihapus atau diganti namanya tidak muncul lagi. Hapus massal memakai
+`authorizeIndividualRecords('delete')`. Menghapus pendaftar ikut menghapus file KK-nya.
 
 ### Pencarian dan saringan
 
@@ -114,12 +125,13 @@ menghapus file KK-nya.
 | `pendaftaran.kk_diunduh` | KK berhasil diunduh | - |
 | `pendaftaran.status` | bendera status berubah | `flag`, `value`, `applicant_id` |
 | `pendaftaran.catatan` | catatan panitia berubah | `applicant_id` (isi tidak dicatat) |
-| `pendaftaran.ekspor` | ekspor Excel/PDF | `format`, `count` |
+| `pendaftaran.ekspor` | ekspor Excel/PDF | `format`, `count`, `nik_lengkap` (bool: NIK lengkap ikut diekspor) |
 | `pendaftaran.dihapus` | pendaftar dihapus | `applicant_id` |
 
 ### Unduh KK (`GET /admin/pendaftar/{id}/kk`, `pendaftar.kk`)
 
-Middleware `panel:admin` + `Filament\Http\Middleware\Authenticate` (tamu ke login admin, akun tanpa role 403) +
+Middleware `panel:admin` + `Filament\Http\Middleware\AuthenticateSession` (sesi berakhir bila kata sandi diganti,
+sama seperti panel) + `Filament\Http\Middleware\Authenticate` (tamu ke login admin, akun tanpa role 403) +
 `can:downloadKk,applicant`; id hanya angka. Respons: byte asli dari `KkStorage`, `Content-Type` dari amplop,
 `Content-Disposition: attachment; filename="kk-<id>.<ext>"`, `nosniff`, `Content-Security-Policy: sandbox;
 default-src 'none'` (controller memberi atribut request `SecurityHeaders::KEEP_SANDBOX_CSP`; Core hanya
@@ -151,4 +163,4 @@ private, no-store`. File tidak ada/rusak: 404 teks polos, log berisi id + nama k
   Kunci "sesi" memakai penanda acak di sesi, bukan ID sesi. Respons 429 berupa halaman berbahasa Indonesia.
 - Turnstile wajib di kiriman akhir (`TurnstileRule`). Tanpa `TURNSTILE_SITE_KEY`: pengguna melihat
   "Verifikasi keamanan tidak tersedia, coba lagi nanti", kiriman diblokir, detail dicatat di log (gagal tertutup).
-- Disarankan `SESSION_ENCRYPT=true` di produksi sebagai lapisan tambahan (flash terima kasih dan draf sudah terenkripsi).
+- `SESSION_ENCRYPT=true` di produksi (bawaan `.env.example`) sebagai lapisan tambahan (data terima kasih dan draf sudah terenkripsi).

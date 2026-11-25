@@ -110,7 +110,7 @@ User story
 - Sebagai panitia, saya ingin mencari dan menyaring pendaftar, mengekspor Excel dan PDF, dan mencentang status.
 - Sebagai panitia, saya ingin mengunduh kartu keluarga pendaftar lewat admin panel.
 - Sebagai admin, saya ingin mengganti nomor WhatsApp tujuan, isi pesan, dan PDF biaya.
-- Sebagai admin, saya ingin mengubah daftar pilihan (jenjang formal, kelas, pendidikan terakhir, pekerjaan orang tua) tanpa mengubah kode (usulan spec 9).
+- Sebagai admin, saya ingin mengubah daftar pilihan (jenjang formal, kelas, pendidikan terakhir) tanpa mengubah kode (usulan spec 9). Pekerjaan orang tua/wali diisi teks bebas, bukan daftar pilihan (keputusan builder, bagian 7).
 
 Kriteria penerimaan
 - Formulir terdiri atas 4 langkah dengan indikator langkah; field "nama pondok sebelumnya" dan "pendidikan pondok sebelumnya" hanya muncul bila "pernah mondok" = ya.
@@ -155,13 +155,13 @@ Kriteria penerimaan
 
 ### 4.3 Performa
 
-Spec tidak menetapkan angka performa. Arahan dari spec: font dihosting sendiri demi kecepatan, tampilan publik ringan (Blade + Tailwind), ekspor Excel/PDF berjalan langsung tanpa antrean. Target terukur ditetapkan builder dan dicatat di sini bila sudah disepakati.
+Spec tidak menetapkan angka performa. Arahan dari spec: font dihosting sendiri demi kecepatan, tampilan publik ringan (Blade + Tailwind), ekspor Excel/PDF berjalan langsung tanpa antrean. Builder tidak menetapkan target terukur (belum ada pengukuran di server sasaran); yang diterapkan: halaman publik tanpa JavaScript buatan sendiri, CSS satu berkas hasil build, font WOFF2 subset latin dihosting sendiri, gambar `loading="lazy"`, ekspor PDF dibatasi 500 baris.
 
 ### 4.4 Arsitektur dan operasional (spec 7, 8)
 
 - Pendekatan B: Filament + modul buatan sendiri yang ringan, dipilih pemilik. Modul tidak saling memanggil kecuali lewat kontrak (interface/event) di inti. Menambah modul tidak mengubah modul lain.
 - Hosting: server lokal aaPanel lewat Cloudflare Zero Trust Tunnel, dapat pindah ke VPS.
-- Item "keputusan saya" (usulan, dapat diubah): Filament, Spatie Permission + Filament Shield, Blade + Tailwind, Livewire atau Alpine, ekspor tanpa antrean, struktur `Modules/<Nama>`.
+- Item "keputusan saya" (usulan, dapat diubah): Filament, Spatie Permission + Filament Shield, Blade + Tailwind, ekspor tanpa antrean, struktur `Modules/<Nama>`. Usulan "Livewire atau Alpine untuk wizard" tidak dipakai: wizard server-rendered tanpa JavaScript (bagian 7).
 
 ## 5. Diserahkan ke builder (spec 9)
 
@@ -170,3 +170,36 @@ Versi PHP/Laravel/Filament yang masih didukung keamanannya dan bukti `composer a
 ## 6. Yang perlu disiapkan pemilik (spec 10)
 
 File logo, video profil, foto kegiatan, teks sejarah, PDF rincian biaya, dan nomor WhatsApp panitia. Tidak ada pertanyaan terbuka yang menahan perencanaan.
+
+## 7. Keputusan builder (hasil implementasi, 2026-11)
+
+Hal-hal yang spec serahkan ke builder (bagian 5) dan keputusan lain yang diambil saat membangun. Semuanya dapat diubah pemilik.
+
+**Formulir pendaftaran**
+- Wizard 4 langkah **server-rendered tanpa JavaScript** (tanpa Livewire/Alpine). Alasan: CSP publik ketat (tanpa skrip/style inline) dan banyak wali memakai HP Android lama. Isian bersyarat (pernah mondok, wali, alamat sama) memakai CSS murni; validasi server tetap acuan. Draf tiap langkah disimpan terenkripsi di sesi (120 menit) dan baru masuk database saat kiriman akhir. Satu-satunya skrip adalah widget Turnstile Cloudflare di langkah 4.
+- Setelah kirim, wali dibawa ke halaman terima kasih milik situs dengan tombol WhatsApp besar (plus pengalihan otomatis tanpa JavaScript), bukan langsung ke wa.me. Halaman ini bisa dimuat ulang selama 10 menit.
+- Alamat (jalan/dusun, RT, RW, desa, kecamatan, kabupaten, provinsi) berupa **teks bebas**, bukan dropdown wilayah bertingkat.
+- Aturan validasi: NIK tepat 16 digit (spasi/titik/tanda hubung dibuang); HP Indonesia `^(\+?62|0)8[0-9]{8,12}$` setelah pemisah dibuang, disimpan `08...`; usia 5-30 tahun; teks tanpa `<`, `>`, karakter kontrol, dan karakter arah teks (bidi). Orang tua masih ada: minimal satu HP ayah/ibu. Kedua orang tua meninggal: data wali wajib.
+- File KK: JPG, PNG, atau PDF, **maksimal 5 MB**, diperiksa isinya (bukan hanya ekstensi); PDF berkonten aktif (JavaScript, aksi otomatis, lampiran) ditolak; disimpan terenkripsi di disk privat dan diunduh hanya lewat route berizin.
+- **Pekerjaan orang tua/wali berupa teks bebas**, bukan data master. Kriteria "admin dapat mengubah daftar pilihan" berlaku untuk jenjang, kelas per jenjang, dan pendidikan terakhir. Data master awal dibuat sekali saat instalasi; setelah itu sepenuhnya dikelola admin.
+- NIK ganda menampilkan pesan ramah "Data dengan NIK ini sudah kami terima..." tanpa data pendaftar lama. Pesan ini membuka risiko kecil enumerasi (orang bisa mengetahui bahwa suatu NIK sudah terdaftar); risiko diterima dan dibatasi Turnstile serta pembatas laju (3/menit per IP+sesi, 10/menit dan 30/jam per IP).
+- Pesan WhatsApp bawaan memuat nama calon santri dan 4 digit akhir NIK (bukan NIK lengkap); templat diubah admin.
+
+**Izin dan role**
+- Nama izin gaya Shield `Aksi:Model` (mis. `ViewAny:Applicant`, `Update:Post`). Izin khusus: `Export:Applicant` (ekspor Excel/PDF), `RevealNik:Applicant` (NIK lengkap), `DownloadKk:Applicant` (unduh KK), `ManageAll:Post` (ubah/hapus berita milik penulis lain), `Manage:SiteSettings` (pengaturan situs). Semuanya tampil dan dapat diatur di editor role (Shield > Roles) oleh superadmin.
+- Nilai awal mengikuti matriks bagian 2; seeder memberi izin bawaan sekali saja, sehingga perubahan superadmin tidak ditimpa saat pembaruan. Role `superadmin` (akses penuh lewat gate) tidak dapat diganti nama atau dihapus.
+- Penulis berita hanya dapat mengubah/menghapus beritanya sendiri; panitia tidak dapat menghapus pendaftar.
+
+**Audit**
+- Log aktivitas admin dicatat tanpa data pribadi: pendaftar dilihat, NIK dibuka, KK diunduh, status/catatan diubah, ekspor (format, jumlah, apakah NIK lengkap ikut), pendaftar dihapus. Log disimpan 365 hari. **Belum ada halaman penampil log di admin panel**; sementara dibaca langsung dari tabel `activity_log`.
+
+**Tampilan**
+- Font dihosting sendiri: Fraunces (judul), Figtree (isi), Amiri (Arab), WOFF2. Ikon Lucide (SVG disalin, tanpa CDN). Token warna hijau utama, hijau lembut, emas, netral hangat di `resources/css/app.css`. Halaman galat (404, 419, 429, 500, 503) berbahasa Indonesia.
+- Tidak ada target performa terukur (bagian 4.3).
+
+**Ditunda (belum dibangun, usulan tindak lanjut)**
+- Saringan kelas mengikuti jenjang dan saringan provinsi/kabupaten di daftar pendaftar.
+- Gambar di dalam isi berita (sekarang hanya gambar sampul).
+- Penghapusan metadata EXIF/GPS dari foto yang diunggah (sampul berita, KK).
+- Halaman penampil log aktivitas di admin panel.
+- Turnstile pada login admin (sebagai gantinya disarankan Cloudflare Access untuk `/admin*`, lihat `docs/DEPLOY-aapanel.md` bagian 7).
