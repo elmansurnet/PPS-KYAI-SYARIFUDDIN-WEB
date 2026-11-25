@@ -69,7 +69,7 @@ pekerjaan wajib. Keduanya meninggal: wali (nama, pekerjaan, HP, alamat) wajib, H
   File dienkripsi utuh di memori (puncak sekitar 3-4x ukuran file, kurang dari 25 MB untuk 5 MB). Isi diperiksa `KkFileInspector`: finfo,
   tanda tangan biner + `getimagesize` untuk gambar, `%PDF-` dan `%%EOF` untuk PDF, tolak penanda `<?php`,
   `<script`, `<html`; PDF berkonten aktif (`/JavaScript`, `/OpenAction`, `/Launch`, dan sejenisnya) ditolak.
-  Pastikan `upload_max_filesize`/`post_max_size` PHP di server di atas batas ini (8M). Unggahan yang ditolak PHP
+  Pastikan `upload_max_filesize`/`post_max_size` PHP di server di atas batas ini (12M; PDF rincian biaya di pengaturan situs boleh 10 MB). Unggahan yang ditolak PHP
   (melebihi `upload_max_filesize`) memunculkan pesan `kk.uploaded` berbahasa Indonesia.
 - `RegisterApplicant`: cek duplikat -> simpan file -> transaksi (pendaftar + audit `pendaftaran.baru` berisi
   id saja). Gagal di transaksi: file dihapus. Duplikat (termasuk balapan, via `isDuplicateNikViolation`) ->

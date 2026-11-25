@@ -18,7 +18,7 @@ Keputusan saya (usulan, dapat diubah, bukan kesepakatan): Filament untuk admin; 
 - `composer security` : `composer audit` + `npm audit --audit-level=high`. Harus bersih sebelum rilis.
 - `npm run build` : build aset front-end. Jalankan SEBELUM tes pada checkout baru/CI (`PublicLayoutTest` membaca manifest Vite di `public/build`).
 - `php artisan shield:generate --all --panel=admin --option=permissions` : buat izin Shield setelah menambah resource. SELALU dengan `--option=permissions`; opsi lain menimpa policy kustom.
-- Deploy, cadangan, dan pemulihan: `docs/DEPLOY-aapanel.md`. CI: `.github/workflows/ci.yml`.
+- Deploy, cadangan, dan pemulihan: `docs/DEPLOY-aapanel.md` (aaPanel dengan Nginx atau Apache, via Cloudflare Tunnel) dan `docs/DEPLOY-vps-cloudflare.md` (VPS ber-IP publik + DNS Cloudflare). CI: `.github/workflows/ci.yml`.
 
 ## Struktur modul
 

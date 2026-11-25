@@ -1,6 +1,6 @@
 # Panduan deploy: aaPanel + Cloudflare Tunnel
 
-Panduan ini untuk server lokal/VPS dengan aaPanel (Nginx + PHP-FPM + MySQL) yang dipublikasikan lewat Cloudflare Zero Trust Tunnel (`cloudflared`). Perintah dijalankan dari folder proyek (mis. `/www/wwwroot/pps`) sebagai user web server (biasanya `www`).
+Panduan ini untuk server lokal/VPS dengan aaPanel (**Nginx atau Apache**, PHP-FPM, MySQL) yang dipublikasikan lewat Cloudflare Zero Trust Tunnel (`cloudflared`). Perintah dijalankan dari folder proyek (mis. `/www/wwwroot/pps`) sebagai user web server (biasanya `www`). Pilihan web server hanya memengaruhi bagian 2; bagian lainnya sama untuk keduanya. Untuk VPS dengan IP publik dan DNS di Cloudflare (tanpa tunnel) lihat juga [`DEPLOY-vps-cloudflare.md`](DEPLOY-vps-cloudflare.md).
 
 > **Peringatan utama.** NIK dan file KK terenkripsi dengan `APP_KEY`; pencarian dan cek duplikat NIK memakai `NIK_HMAC_KEY`. **Bila `APP_KEY` hilang, NIK dan KK hilang selamanya**, cadangan secanggih apa pun tidak bisa menolong. Baca [Penyimpanan kunci](#10-penyimpanan-kunci-wajib-dibaca) sebelum go-live.
 
@@ -12,17 +12,25 @@ Panduan ini untuk server lokal/VPS dengan aaPanel (Nginx + PHP-FPM + MySQL) yang
 - Node 22 hanya untuk build aset (boleh di mesin lain, lalu salin `public/build`).
 - `cloudflared` terpasang di host yang sama.
 - Pengaturan PHP (aaPanel: App Store > PHP 8.3 > Setting > Configuration):
-  - `upload_max_filesize = 8M` dan `post_max_size = 8M` (file KK maks 5 MB; nilai harus di atasnya).
+  - `upload_max_filesize = 12M` dan `post_max_size = 12M` (file KK maks 5 MB, tetapi PDF rincian biaya di pengaturan situs boleh sampai 10 MB; nilai harus di atas keduanya).
   - `memory_limit = 256M` atau lebih (ekspor PDF; enkripsi file KK 5 MB memakai kurang dari 25 MB per permintaan).
   - `max_execution_time = 120` atau lebih (ekspor Excel/PDF).
   - `expose_php = Off`.
   - `request_terminate_timeout` PHP-FPM jangan lebih kecil dari `max_execution_time`.
 
-## 2. Situs di aaPanel (Nginx)
+## 2. Situs di aaPanel (Nginx atau Apache)
+
+Pasang **satu** web server lewat App Store aaPanel (Nginx atau Apache; keduanya tidak bisa memakai port 80 bersamaan). Pilih salah satu subbagian di bawah; langkah umum berlaku untuk keduanya.
+
+Langkah umum:
 
 1. Website > Add site: domain = host publik tunnel (mis. `pendaftaran.contoh.sch.id`), PHP 8.3, database MySQL (catat nama/user/sandi).
-2. Site directory = folder proyek; **Running directory = `/public`** (Nginx root = `public/`). Bila open_basedir aaPanel aktif, pastikan mencakup folder proyek, bukan hanya `public/`.
-3. Rewrite Laravel (Pseudo-static):
+2. Site directory = folder proyek; **Running directory = `/public`** (web root = `public/`). Bila open_basedir aaPanel aktif, pastikan mencakup folder proyek, bukan hanya `public/`.
+3. Tentukan batas unggah di PHP (bagian 1) **dan** di web server (subbagian di bawah): keduanya harus ≥ 12 MB, bila tidak unggahan KK dan PDF biaya gagal dengan 413.
+
+### 2.1 Bila web server Nginx
+
+1. Rewrite Laravel (Pseudo-static):
 
    ```nginx
    location / {
@@ -30,9 +38,9 @@ Panduan ini untuk server lokal/VPS dengan aaPanel (Nginx + PHP-FPM + MySQL) yang
    }
    ```
 
-   Pastikan `client_max_body_size` Nginx minimal `8m` (bawaan stok Nginx 1 MB akan menolak unggahan KK dengan 413; bawaan aaPanel 50m sudah cukup).
+   Pastikan `client_max_body_size` Nginx minimal `12m` (bawaan stok Nginx 1 MB akan menolak unggahan KK dan PDF biaya dengan 413; bawaan aaPanel 50m sudah cukup).
 
-4. Tolak berkas tersembunyi dan direktori internal (di konfigurasi situs, sebelum blok `location ~ \.php$`):
+2. Tolak berkas tersembunyi dan direktori internal (di konfigurasi situs, sebelum blok `location ~ \.php$`):
 
    ```nginx
    location ~ /\.(?!well-known) { deny all; }
@@ -45,7 +53,51 @@ Panduan ini untuk server lokal/VPS dengan aaPanel (Nginx + PHP-FPM + MySQL) yang
    Aturan `^/storage/.*\.php$` mencegah berkas `.php` yang entah bagaimana terunggah ke `public/storage` dieksekusi PHP-FPM (nginx memilih regex pertama yang cocok, jadi aturan ini harus berada sebelum handler fastcgi).
 
    **Jangan memblokir `/storage/` secara menyeluruh**: `storage:link` membuat `public/storage` (isi `storage/app/public`) yang melayani logo, gambar berita, galeri, dan PDF biaya; hanya `app`, `framework`, dan `logs` yang ditolak. Perlindungan utamanya adalah root Nginx = `public/`: folder di luar `public/` memang tidak terjangkau web; aturan di atas hanya lapis kedua (dotfile seperti `.env` sudah ditolak aturan pertama). Jangan pernah menaruh `.env`, cadangan, atau ekspor di dalam `public/`. Jangan memblokir ekstensi umum (`.json`, `.md`, `.zip`) secara global, karena bisa mematikan berkas unggahan yang sah.
-5. Origin hanya untuk tunnel (bagian 7): Nginx **harus** mendengarkan `127.0.0.1` saja (mis. `listen 127.0.0.1:80;`) atau port 80/443 diblokir dari luar oleh firewall.
+3. Origin hanya untuk tunnel: lihat 2.3.
+
+### 2.2 Bila web server Apache
+
+Menu dan path di bawah umum untuk aaPanel; nama menu dapat berbeda antarversi, jadi cocokkan dengan panel Anda. Panel menaruh konfigurasi situs di `/www/server/panel/vhost/apache/<domain>.conf` (Website > situs > Settings > Config file); Apache di `/www/server/apache`.
+
+1. **Modul.** Pastikan `rewrite`, `headers`, dan `proxy_fcgi` aktif: `/www/server/apache/bin/httpd -M | grep -E 'rewrite|headers|proxy_fcgi'` (ketiganya harus tampil; PHP 8.3 dihubungkan panel ke PHP-FPM lewat `proxy_fcgi`).
+2. **Rewrite Laravel.** Dengan Running directory `/public`, Apache membaca `public/.htaccess` bawaan Laravel, jadi **kosongkan tab Pseudo-static** (aturan yang diisi di sana ditaruh panel di folder situs di atas web root dan tidak terbaca). Syaratnya hanya `AllowOverride` pada blok `<Directory>` situs mencakup `FileInfo` dan `Options` (bawaan panel biasanya `AllowOverride All`) dan `Options` memuat `FollowSymLinks` (perlu untuk symlink `public/storage`). Periksa di Config file.
+3. **Tambahan konfigurasi.** Di Config file, di dalam `<VirtualHost>` situs (di bawah blok `<Directory>` bawaan panel; jangan menduplikasi `SetHandler` PHP yang sudah ada), tambahkan:
+
+   ```apache
+   # Berkas/folder tersembunyi (.env, .git, dst.), kecuali .well-known.
+   <LocationMatch "/\.(?!well-known/)">
+       Require all denied
+   </LocationMatch>
+
+   # Jalur internal storage tidak boleh dilayani.
+   <LocationMatch "^/storage/(app|framework|logs)/">
+       Require all denied
+   </LocationMatch>
+
+   # Berkas PHP yang entah bagaimana terunggah ke public/storage tidak boleh dieksekusi.
+   <LocationMatch "(?i)^/storage/.*\.php">
+       Require all denied
+   </LocationMatch>
+
+   # Batas unggahan 12 MB (sejalan dengan post_max_size PHP) dan waktu ekspor besar.
+   LimitRequestBody 12582912
+   Timeout 150
+   ProxyTimeout 150
+
+   # Cache aset statis (berkas /build bernama-hash).
+   <LocationMatch "^/build/">
+       Header set Cache-Control "public, max-age=31536000, immutable"
+   </LocationMatch>
+   ```
+
+   Simpan salinan tambahan ini di luar panel: aaPanel dapat membuat ulang berkas vhost saat Anda mengubah domain, SSL, atau versi PHP dari panel; periksa Config file setelah perubahan semacam itu.
+4. **Jangan** menambah header keamanan (CSP, HSTS, `X-Content-Type-Options`, dll.) di Apache: aplikasi sudah mengirimnya dan header ganda bertabrakan. **Jangan** mengaktifkan pengalihan HTTP ke HTTPS di panel/Apache: TLS berakhir di Cloudflare dan tunnel berbicara HTTP ke origin, jadi pengalihan membuat loop (pakai "Always Use HTTPS" di Cloudflare).
+5. Terapkan: `/www/server/apache/bin/httpd -t` (harus `Syntax OK`), lalu muat ulang Apache dari panel (App Store > Apache > Service > Reload).
+6. **Gejala umum:** semua halaman selain `/` 404 = `mod_rewrite` mati atau `AllowOverride` tidak memuat `FileInfo`; kode PHP tampil sebagai teks = handler PHP situs hilang; 403 di semua halaman = izin folder atau `Require all granted` hilang; gambar/PDF unggahan 404 = `storage:link` belum dijalankan atau `FollowSymLinks` mati; 413 = `LimitRequestBody` atau batas PHP terlalu kecil; 404 "host tak tepercaya" = domain situs tidak sama dengan host `APP_URL`.
+
+### 2.3 Origin hanya untuk tunnel (bagian 7)
+
+Web server **harus** hanya terjangkau oleh `cloudflared` lokal. Nginx: `listen 127.0.0.1:80;`. Apache: di `/www/server/apache/conf/httpd.conf` ganti `Listen 80` menjadi `Listen 127.0.0.1:80` (dan tanpa `Listen 443`); aaPanel dapat menimpa port saat situs/SSL diubah, jadi **selalu** tambahkan firewall (aaPanel Security / firewall penyedia) yang menutup 80/443/3306 dari luar. Verifikasi: `ss -ltnp | grep -E 'nginx|httpd'` harus hanya menampilkan `127.0.0.1:80`.
 
 ## 3. Checklist `.env` production
 
@@ -169,6 +221,8 @@ php artisan optimize:clear && php artisan optimize
 php artisan up
 ```
 
+Setelah kode baru terpasang, muat ulang PHP-FPM dari panel (App Store > PHP 8.3 > Service > Reload) agar OPcache memakai kode baru; berlaku untuk Nginx maupun Apache.
+
 Seeder aman dijalankan ulang dan tidak menimpa pengaturan role dari panel (izin yang dicabut superadmin tetap tercabut; lihat "Aturan seeder" di bagian 4), tetapi tidak perlu dijalankan pada pembaruan biasa. Jangan menjalankan `db:seed` tanpa `--class` hanya untuk "berjaga-jaga".
 
 Rollback: `php artisan down`, kembalikan kode ke rilis yang dicatat sebelum pembaruan (`git checkout <tag>` lalu `composer install --no-dev`), bila migrasi baru merusak data pulihkan database dari cadangan (bagian 9), lalu `optimize` dan `up`. Jangan pernah mengubah `APP_KEY` saat rollback.
@@ -177,9 +231,9 @@ Rollback: `php artisan down`, kembalikan kode ke rilis yang dicatat sebelum pemb
 
 - `cloudflared` berjalan di host yang sama. Public hostname di Zero Trust (Networks > Tunnels) menunjuk ke `http://127.0.0.1:80`.
 - **Host publik tunnel harus sama dengan host `APP_URL`.** `TrustHosts` hanya menerima host itu; tidak ada alias `www` atau apex kecuali ditambahkan ke kode. Header Host yang diteruskan ke origin harus host publik (jangan ditimpa ke `localhost`).
-- **Origin hanya `127.0.0.1`.** Aplikasi mempercayai `X-Forwarded-For` dan `X-Forwarded-Proto` dari semua proxy (`*`) karena satu-satunya pihak yang berbicara ke origin adalah `cloudflared` lokal. Bila origin bisa dijangkau langsung dari LAN/internet, penyerang dapat memalsukan IP (melewati pembatas laju per IP dan mengotori log audit) dan skema. Karena itu: Nginx `listen 127.0.0.1:80`, firewall menutup 80/443/3306 dari luar, dan port panel aaPanel jangan dibuka ke publik tanpa pembatasan.
+- **Origin hanya `127.0.0.1`.** Aplikasi mempercayai `X-Forwarded-For` dan `X-Forwarded-Proto` dari semua proxy (`*`) karena satu-satunya pihak yang berbicara ke origin adalah `cloudflared` lokal. Bila origin bisa dijangkau langsung dari LAN/internet, penyerang dapat memalsukan IP (melewati pembatas laju per IP dan mengotori log audit) dan skema. Karena itu: Nginx `listen 127.0.0.1:80` atau Apache `Listen 127.0.0.1:80` (bagian 2.3), firewall menutup 80/443/3306 dari luar, dan port panel aaPanel jangan dibuka ke publik tanpa pembatasan.
 - Health check/uptime harus mengirim header `Host` publik, mis. `curl -H "Host: pendaftaran.contoh.sch.id" http://127.0.0.1/up`; tanpa itu Laravel menjawab 404 (host tak tepercaya) dan pemeriksaan tampak gagal.
-- Pindah ke VPS tanpa tunnel: sempitkan `trustProxies` ke IP proxy yang sah; jangan biarkan `*` pada origin yang terbuka ke internet.
+- VPS dengan IP publik dan DNS ber-proxy Cloudflare (tanpa tunnel): ikuti [`DEPLOY-vps-cloudflare.md`](DEPLOY-vps-cloudflare.md). Syarat mutlaknya: 443 hanya dari IP Cloudflare **dan** Authenticated Origin Pulls, karena `trustProxies('*')` percaya header pihak yang terhubung ke origin. Origin yang terbuka ke internet tanpa pembatasan itu **tidak aman** untuk konfigurasi ini; bila terpaksa, sempitkan `trustProxies` di `bootstrap/app.php` ke IP proxy yang sah.
 
 ### Pengaturan Cloudflare yang disarankan
 
