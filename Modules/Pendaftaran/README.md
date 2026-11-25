@@ -77,7 +77,9 @@ pekerjaan wajib. Keduanya meninggal: wali (nama, pekerjaan, HP, alamat) wajib, H
 `ApplicantResource` (grup navigasi "Penerimaan Santri Baru"): daftar + detail saja. Tidak ada halaman
 buat (pendaftar hanya dari formulir publik) dan tidak ada form edit data pendaftar; panitia hanya mengubah
 tiga bendera status (toggle di tabel atau aksi "Ubah status") dan `catatan_panitia` (teks polos, maks 2000).
-Pencarian global Filament dimatikan untuk resource ini.
+Pencarian global Filament dimatikan untuk resource ini. Kata kunci pencarian tabel TIDAK diikat ke URL
+(`ListApplicants::$tableSearch` dideklarasikan ulang tanpa `#[Url]`) dan tidak disimpan di sesi, supaya NIK yang
+diketik tidak masuk riwayat peramban, log akses, atau header Referer. Saringan/urutan tetap di URL (tanpa data pribadi).
 
 ### Izin (gaya Shield, `ApplicantPolicy` ditulis tangan)
 
@@ -120,7 +122,8 @@ menghapus file KK-nya.
 Middleware `panel:admin` + `Filament\Http\Middleware\Authenticate` (tamu ke login admin, akun tanpa role 403) +
 `can:downloadKk,applicant`; id hanya angka. Respons: byte asli dari `KkStorage`, `Content-Type` dari amplop,
 `Content-Disposition: attachment; filename="kk-<id>.<ext>"`, `nosniff`, `Content-Security-Policy: sandbox;
-default-src 'none'` (SecurityHeaders Core tidak menimpa CSP yang sudah ditetapkan respons), `Cache-Control:
+default-src 'none'` (controller memberi atribut request `SecurityHeaders::KEEP_SANDBOX_CSP`; Core hanya
+mempertahankan CSP yang diawali `sandbox` pada request bertanda itu, selain itu selalu menimpa), `Cache-Control:
 private, no-store`. File tidak ada/rusak: 404 teks polos, log berisi id + nama kelas pengecualian saja.
 
 ### Ekspor (`Exports/`)
@@ -130,7 +133,9 @@ private, no-store`. File tidak ada/rusak: 404 teks polos, log berisi id + nama k
 - Excel (`ApplicantsExport::fromQuery`, maatwebsite/excel 4): dibaca per 200 baris, tanpa batas. Kolom: No, Nama,
   NIK, TTL, Alamat lengkap, Pernah mondok, Pondok sebelumnya, Pendidikan terakhir, Jenjang, Kelas, Nama/HP
   ayah, Nama/HP ibu, Wali, tiga status (Ya/Belum), Tanggal daftar. Semua sel bertipe string (nomor urut
-  angka), kolom NIK/HP berformat teks. Teks berawalan `=`, `+`, `-`, `@`, tab, CR diberi apostrof (injeksi formula).
+  angka), kolom NIK/HP berformat teks. Teks berawalan `=`, `+`, `-`, `@`, tab, CR, LF, atau pemicu formula setelah spasi/tab/CR/LF di depan, diberi
+  apostrof (injeksi formula). Audit ekspor dicatat SEBELUM file dibuat: bila audit gagal, ekspor batal (gagal
+  tertutup) dan tidak ada file sementara berisi data pribadi yang tertinggal.
 - PDF (`ApplicantsPdf::render`, dompdf, A4 lanskap): judul nama situs, tanggal ekspor, ringkasan saringan (kata
   kunci NIK tidak ditulis ulang), jumlah. Maks `pendaftaran.pdf_max_rows` (500, env `PENDAFTARAN_PDF_MAX_ROWS`);
   lebih dari itu aksi ditolak dengan pesan. Remote/PHP/JS dompdf mati, semua nilai di-escape.

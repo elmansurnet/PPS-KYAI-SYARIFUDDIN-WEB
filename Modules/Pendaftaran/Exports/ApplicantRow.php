@@ -24,7 +24,7 @@ class ApplicantRow
 
     public const EMPTY = '-';
 
-    private const FORMULA_PREFIXES = ['=', '+', '-', '@', "\t", "\r"];
+    private const FORMULA_PREFIXES = ['=', '+', '-', '@', "\t", "\r", "\n"];
 
     /**
      * Urutan stabil untuk pembacaan bertahap (chunk memakai LIMIT/OFFSET): urutan yang sudah ada
@@ -118,7 +118,12 @@ class ApplicantRow
 
     public static function clean(string $value): string
     {
-        if ($value !== '' && in_array($value[0], self::FORMULA_PREFIXES, true)) {
+        // Pemicu formula juga dicek setelah spasi/tab/CR/LF di depan dibuang (" =cmd", "\n=cmd");
+        // nilai yang diawali tab/CR/LF selalu dinetralkan.
+        $trimmed = ltrim($value, " \t\r\n");
+
+        if (($value !== '' && in_array($value[0], self::FORMULA_PREFIXES, true))
+            || ($trimmed !== '' && in_array($trimmed[0], ['=', '+', '-', '@'], true))) {
             return "'".$value;
         }
 

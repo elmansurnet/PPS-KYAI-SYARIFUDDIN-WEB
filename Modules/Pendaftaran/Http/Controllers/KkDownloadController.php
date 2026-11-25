@@ -2,8 +2,10 @@
 
 namespace Modules\Pendaftaran\Http\Controllers;
 
+use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Log;
+use Modules\Core\Http\Middleware\SecurityHeaders;
 use Modules\Core\Support\AuditLog;
 use Modules\Pendaftaran\Models\Applicant;
 use Modules\Pendaftaran\Services\KkStorage;
@@ -26,7 +28,7 @@ class KkDownloadController
         'application/pdf' => 'pdf',
     ];
 
-    public function __invoke(Applicant $applicant, KkStorage $storage): Response
+    public function __invoke(Request $request, Applicant $applicant, KkStorage $storage): Response
     {
         if (blank($applicant->kk_path)) {
             return $this->unavailable();
@@ -47,6 +49,9 @@ class KkDownloadController
         $extension = self::EXTENSIONS[$mime] ?? 'bin';
 
         AuditLog::record('pendaftaran.kk_diunduh', $applicant);
+
+        // Minta SecurityHeaders mempertahankan CSP sandbox di bawah (hanya berlaku bila nilainya diawali "sandbox").
+        $request->attributes->set(SecurityHeaders::KEEP_SANDBOX_CSP, true);
 
         return response($bytes, 200, [
             'Content-Type' => $mime,

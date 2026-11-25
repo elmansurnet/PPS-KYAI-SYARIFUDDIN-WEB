@@ -20,14 +20,18 @@ use Symfony\Component\HttpFoundation\Response;
  */
 class SecurityHeaders
 {
+    /** Atribut request: controller unduhan menyatakan CSP sandbox miliknya harus dipertahankan. */
+    public const KEEP_SANDBOX_CSP = 'security_headers.keep_sandbox_csp';
+
     public function handle(Request $request, Closure $next): Response
     {
         $response = $next($request);
 
         $headers = $response->headers;
-        // Respons yang sudah menetapkan CSP sendiri (mis. unduhan file dengan "sandbox; default-src 'none'",
-        // yang lebih ketat) tidak ditimpa. Hanya kode server yang bisa menetapkannya.
-        if (! $headers->has('Content-Security-Policy')) {
+        // Gagal tertutup: CSP bawaan selalu dipasang, KECUALI controller secara eksplisit menandai request
+        // (atribut KEEP_SANDBOX_CSP) DAN CSP yang ditetapkannya berupa sandbox (mis. unduhan file KK
+        // "sandbox; default-src 'none'", lebih ketat dari kebijakan bawaan).
+        if (! $this->keepsSandboxPolicy($request, $response)) {
             $headers->set('Content-Security-Policy', $this->isAdminSurface($request)
                 ? $this->adminPolicy()
                 : $this->publicPolicy());
@@ -41,6 +45,14 @@ class SecurityHeaders
         }
 
         return $response;
+    }
+
+    private function keepsSandboxPolicy(Request $request, Response $response): bool
+    {
+        $preset = (string) $response->headers->get('Content-Security-Policy', '');
+
+        return $request->attributes->get(self::KEEP_SANDBOX_CSP) === true
+            && preg_match('/^sandbox(;|$)/', $preset) === 1;
     }
 
     private function isAdminSurface(Request $request): bool

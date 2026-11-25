@@ -1,7 +1,12 @@
 <?php
 
+use App\Providers\AppServiceProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Middleware\TrustHosts;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\URL;
+use Modules\Core\Http\Middleware\SecurityHeaders;
 
 uses(RefreshDatabase::class);
 
@@ -122,7 +127,7 @@ test('x-forwarded-for client ip is used', function () {
 test('trusted hosts are limited to the APP_URL host outside local', function () {
     config(['app.url' => 'https://pps.example.id']);
 
-    $hosts = (new Illuminate\Http\Middleware\TrustHosts(app()))->hosts();
+    $hosts = (new TrustHosts(app()))->hosts();
 
     expect($hosts)->toBe(['^pps\.example\.id$']);
 });
@@ -132,23 +137,23 @@ test('production forces the url root to APP_URL', function () {
     app()->detectEnvironment(fn () => 'production');
 
     try {
-        (new App\Providers\AppServiceProvider(app()))->boot();
+        (new AppServiceProvider(app()))->boot();
 
         expect(url('/x'))->toBe('https://pps.example.id/x');
     } finally {
-        Illuminate\Support\Facades\URL::forceRootUrl(null);
-        Illuminate\Support\Facades\URL::forceScheme(null);
+        URL::forceRootUrl(null);
+        URL::forceScheme(null);
     }
 });
 
 test('security headers run first in the web group and the admin panel stack', function () {
-    expect(app('router')->getMiddlewareGroups()['web'][0])->toBe(Modules\Core\Http\Middleware\SecurityHeaders::class);
+    expect(app('router')->getMiddlewareGroups()['web'][0])->toBe(SecurityHeaders::class);
 
     $stack = array_values(array_filter(
         Filament\Facades\Filament::getPanel('admin')->getMiddleware(),
         fn ($m) => ! str_starts_with($m, 'panel:'),
     ));
-    expect($stack[0])->toBe(Modules\Core\Http\Middleware\SecurityHeaders::class);
+    expect($stack[0])->toBe(SecurityHeaders::class);
 });
 
 test('error responses such as 419 also carry the security headers', function () {
@@ -159,4 +164,29 @@ test('error responses such as 419 also carry the security headers', function () 
     $response->assertStatus(419);
     $response->assertHeader('X-Content-Type-Options', 'nosniff');
     expect($response->headers->get('Content-Security-Policy'))->toContain("default-src 'self'");
+});
+
+test('a CSP pre-set by a route is overridden unless explicitly marked sandbox', function () {
+    Route::middleware('web')->get('/__weak-csp', fn () => response('ok')->header('Content-Security-Policy', 'default-src *'));
+    Route::middleware('web')->get('/__marked-weak-csp', function (Request $request) {
+        $request->attributes->set(SecurityHeaders::KEEP_SANDBOX_CSP, true);
+
+        return response('ok')->header('Content-Security-Policy', 'default-src *; sandbox');
+    });
+    Route::middleware('web')->get('/__unmarked-sandbox', fn () => response('ok')->header('Content-Security-Policy', "sandbox; default-src 'none'"));
+    Route::middleware('web')->get('/__marked-sandbox', function (Request $request) {
+        $request->attributes->set(SecurityHeaders::KEEP_SANDBOX_CSP, true);
+
+        return response('ok')->header('Content-Security-Policy', "sandbox; default-src 'none'");
+    });
+
+    foreach (['/__weak-csp', '/__marked-weak-csp', '/__unmarked-sandbox'] as $uri) {
+        expect($this->get($uri)->headers->get('Content-Security-Policy'))
+            ->toContain("default-src 'self'")
+            ->toContain("frame-ancestors 'none'")
+            ->not->toContain('default-src *')
+            ->not->toStartWith('sandbox');
+    }
+
+    expect($this->get('/__marked-sandbox')->headers->get('Content-Security-Policy'))->toBe("sandbox; default-src 'none'");
 });

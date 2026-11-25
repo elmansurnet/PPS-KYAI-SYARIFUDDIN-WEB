@@ -513,3 +513,46 @@ test('view page shows KK download link only with DownloadKk and when a file exis
     $without = applicantRow();
     Livewire::test(ViewApplicant::class, ['record' => $without->getKey()])->assertActionHidden('unduhKk');
 });
+
+test('table search is not bound to the url so a nik never lands in the address bar', function () {
+    $target = applicantRow(['nik' => '3201012323230023']);
+    $other = applicantRow();
+    $this->actingAs(applicantActor('panitia_pendaftaran'));
+
+    $component = Livewire::test(ListApplicants::class)
+        ->searchTable('3201012323230023')
+        ->assertCanSeeTableRecords([$target])
+        ->assertCanNotSeeTableRecords([$other]);
+
+    // Livewire mengirim daftar properti yang diikat ke query string lewat efek "url" (dipakai klien untuk
+    // menulis URL). tableSearch tidak boleh ada di sana; tableFilters (kontrol positif) tetap ada.
+    $urlBound = collect(data_get(Livewire::test(ListApplicants::class)->effects, 'url', []))->keys()->all();
+    expect($urlBound)->toContain('tableFilters')->not->toContain('tableSearch')
+        ->and(json_encode(data_get($component->effects, 'url', [])))->not->toContain('3201012323230023');
+
+    // Properti tidak lagi memakai #[Url] (induk ListRecords memakainya), filter/sort tetap boleh.
+    $property = new ReflectionProperty(ListApplicants::class, 'tableSearch');
+    expect($property->getDeclaringClass()->getName())->toBe(ListApplicants::class)
+        ->and($property->getAttributes(\Livewire\Attributes\Url::class))->toBe([]);
+
+    // ?search=<NIK> di URL tidak diterapkan.
+    $this->get(ApplicantResource::getUrl('index').'?search=3201012323230023')->assertOk();
+    Livewire::withQueryParams(['search' => '3201012323230023'])
+        ->test(ListApplicants::class)
+        ->assertSet('tableSearch', '')
+        ->assertCanSeeTableRecords([$target, $other]);
+});
+
+test('kk download keeps its sandbox csp through the security headers middleware', function () {
+    $path = app(KkStorage::class)->store(UploadedFile::fake()->createWithContent('kk.png', kkPngBytes()));
+    $applicant = applicantRow();
+    $applicant->forceFill(['kk_path' => $path])->save();
+    $this->actingAs(applicantActor('panitia_pendaftaran'));
+
+    expect($this->get(route('pendaftar.kk', $applicant))->headers->get('Content-Security-Policy'))
+        ->toBe("sandbox; default-src 'none'");
+
+    // Halaman admin biasa tetap memakai kebijakan admin.
+    expect($this->get(ApplicantResource::getUrl('index'))->headers->get('Content-Security-Policy'))
+        ->toContain("frame-ancestors 'self'");
+});

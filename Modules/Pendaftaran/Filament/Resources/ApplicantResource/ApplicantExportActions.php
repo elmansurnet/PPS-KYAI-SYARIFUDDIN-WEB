@@ -71,11 +71,11 @@ class ApplicantExportActions
     private static function downloadExcel(Builder $query): Response
     {
         $count = (clone $query)->count();
-        $response = ApplicantsExport::fromQuery($query)->download(self::fileName('xlsx'));
-
+        // Audit DULU (gagal tertutup): bila pencatatan gagal, ekspor batal sebelum file sementara xlsx berisi
+        // data pribadi dibuat. File sementara dihapus maatwebsite setelah dikirim (deleteFileAfterSend).
         AuditLog::record('pendaftaran.ekspor', null, ['format' => 'xlsx', 'count' => $count]);
 
-        return $response;
+        return ApplicantsExport::fromQuery($query)->download(self::fileName('xlsx'));
     }
 
     /**
@@ -96,9 +96,9 @@ class ApplicantExportActions
             return null;
         }
 
-        $pdf = ApplicantsPdf::render($query, $filters);
-
         AuditLog::record('pendaftaran.ekspor', null, ['format' => 'pdf', 'count' => $count]);
+
+        $pdf = ApplicantsPdf::render($query, $filters);
 
         return response()->streamDownload(function () use ($pdf) {
             echo $pdf;

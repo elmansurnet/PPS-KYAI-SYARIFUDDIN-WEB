@@ -2,13 +2,16 @@
 
 use App\Models\User;
 use Filament\Facades\Filament;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Livewire\Features\SupportTesting\Testable;
 use Livewire\Livewire;
 use Modules\Core\Database\Seeders\RoleSeeder;
 use Modules\Pendaftaran\Database\Seeders\PendaftaranSeeder;
+use Modules\Pendaftaran\Exports\ApplicantRow;
 use Modules\Pendaftaran\Exports\ApplicantsExport;
 use Modules\Pendaftaran\Exports\ApplicantsPdf;
 use Modules\Pendaftaran\Filament\Resources\ApplicantResource\Pages\ListApplicants;
@@ -377,4 +380,40 @@ test('export actions require Export permission', function () {
         ->assertNoFileDownloaded();
 
     expect(Activity::where('event', 'pendaftaran.ekspor')->count())->toBe(0);
+});
+
+test('formula triggers after leading whitespace or line breaks are neutralised', function () {
+    foreach ([' =cmd', "\n=cmd", "\t=cmd", "\r\n+1", '   @x', '  -2'] as $value) {
+        expect(ApplicantRow::clean($value))->toBe("'".$value, json_encode($value));
+    }
+    foreach (['Ahmad', '0812', '-', 'a=b', ' Budi'] as $value) {
+        expect(ApplicantRow::clean($value))->toBe($value === '-' ? "'-" : $value);
+    }
+
+    $applicant = exportRow(['nama_lengkap' => ' =cmd', 'ayah_nama' => "\n=cmd"]);
+    DB::table('applicants')->where('id', $applicant->id)->update(['kelas' => "\t=cmd"]);
+    $this->actingAs(exportActor('panitia_pendaftaran'));
+    $sheet = sheetFromBinary(ApplicantsExport::fromQuery(Applicant::query())->toBinary());
+
+    expect($sheet->getCell('B2')->getValue())->toBe("' =cmd")
+        ->and($sheet->getCell('K2')->getValue())->toBe("'\n=cmd")
+        ->and($sheet->getCell('J2')->getValue())->toBe("'\t=cmd")
+        ->and($sheet->getCell('B2')->getDataType())->toBe(DataType::TYPE_STRING);
+});
+
+test('a failing audit aborts the export and leaves no temporary file', function () {
+    exportRow(['nama_lengkap' => 'Data Pribadi']);
+    $user = exportActor('panitia_pendaftaran');
+    $this->actingAs($user);
+
+    $tempDir = config('excel.temporary_files.local_path');
+    $before = is_dir($tempDir) ? scandir($tempDir) : [];
+
+    Schema::drop(config('activitylog.table_name', 'activity_log'));
+
+    expect(fn () => Livewire::test(ListApplicants::class)->callAction('eksporExcel'))->toThrow(QueryException::class);
+    expect(fn () => Livewire::test(ListApplicants::class)->callAction('eksporPdf'))->toThrow(QueryException::class);
+
+    $after = is_dir($tempDir) ? scandir($tempDir) : [];
+    expect(array_values(array_diff($after, $before)))->toBe([]);
 });
