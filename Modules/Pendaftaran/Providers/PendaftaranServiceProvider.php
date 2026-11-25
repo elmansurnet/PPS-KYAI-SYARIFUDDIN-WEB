@@ -14,9 +14,11 @@ use Modules\Core\Providers\ModuleServiceProvider;
 use Modules\Core\Support\Navigation;
 use Modules\Pendaftaran\Console\RehashNikCommand;
 use Modules\Pendaftaran\Filament\PendaftaranPlugin;
+use Modules\Pendaftaran\Models\Applicant;
 use Modules\Pendaftaran\Models\Jenjang;
 use Modules\Pendaftaran\Models\KelasOption;
 use Modules\Pendaftaran\Models\PendidikanTerakhir;
+use Modules\Pendaftaran\Policies\ApplicantPolicy;
 use Modules\Pendaftaran\Policies\JenjangPolicy;
 use Modules\Pendaftaran\Policies\KelasOptionPolicy;
 use Modules\Pendaftaran\Policies\PendidikanTerakhirPolicy;
@@ -43,6 +45,7 @@ class PendaftaranServiceProvider extends ModuleServiceProvider
     {
         parent::boot();
 
+        Gate::policy(Applicant::class, ApplicantPolicy::class);
         Gate::policy(Jenjang::class, JenjangPolicy::class);
         Gate::policy(KelasOption::class, KelasOptionPolicy::class);
         Gate::policy(PendidikanTerakhir::class, PendidikanTerakhirPolicy::class);

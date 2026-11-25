@@ -72,6 +72,73 @@ pekerjaan wajib. Keduanya meninggal: wali (nama, pekerjaan, HP, alamat) wajib, H
   id saja). Gagal di transaksi: file dihapus. Duplikat (termasuk balapan, via `isDuplicateNikViolation`) ->
   pesan ramah tanpa info pendaftar lama. Log hanya pesan tetap + nama kelas pengecualian.
 
+## Sisi admin dan panitia (`/admin/pendaftar`)
+
+`ApplicantResource` (grup navigasi "Penerimaan Santri Baru"): daftar + detail saja. Tidak ada halaman
+buat (pendaftar hanya dari formulir publik) dan tidak ada form edit data pendaftar; panitia hanya mengubah
+tiga bendera status (toggle di tabel atau aksi "Ubah status") dan `catatan_panitia` (teks polos, maks 2000).
+Pencarian global Filament dimatikan untuk resource ini.
+
+### Izin (gaya Shield, `ApplicantPolicy` ditulis tangan)
+
+| Izin | admin | panitia_pendaftaran | penulis_berita |
+|---|---|---|---|
+| `ViewAny:Applicant`, `View:Applicant` | ya | ya | - |
+| `Update:Applicant` (status + catatan) | ya | ya | - |
+| `Export:Applicant` (Excel/PDF) | ya | ya | - |
+| `RevealNik:Applicant` (NIK lengkap) | ya | ya | - |
+| `DownloadKk:Applicant` | ya | ya | - |
+| `Delete:Applicant`, `DeleteAny:Applicant` | ya | - | - |
+
+superadmin lewat `Gate::before`. `PendaftaranSeeder` hanya menambah izin (idempoten, cache izin dibersihkan
+sebelum dan sesudah). Hapus massal memakai `authorizeIndividualRecords('delete')`. Menghapus pendaftar ikut
+menghapus file KK-nya.
+
+### Pencarian dan saringan
+
+- `Support/ApplicantSearch`: kata kunci yang (setelah spasi/titik/tanda hubung dibuang) tepat 16 digit dicocokkan
+  ke `nik_hash = NikHasher::hash(...)`; NIK sebagian tidak bisa dicari. Kolom `nik` tidak pernah dipakai di LIKE.
+  Angka 4-15 digit dicari di HP ayah/ibu/wali. Selain itu tiap kata dicari di nama santri/ayah/ibu/wali, HP,
+  desa/kecamatan/kabupaten. Wildcard `%`/`_` di-escape (`ESCAPE '!'`, portabel SQLite/MySQL).
+- Saringan (bisa digabung dengan pencarian): tiga status (Semua/Ya/Belum), jenjang, kelas, pernah mondok,
+  rentang tanggal daftar. Urutan bawaan terbaru dulu, 25 per halaman.
+
+### Audit (`Modules\Core\Support\AuditLog`, tanpa data pribadi)
+
+| Event | Kapan | Properti |
+|---|---|---|
+| `pendaftaran.dilihat` | halaman detail dibuka (sekali per mount) | - (subjek saja) |
+| `pendaftaran.nik_dilihat` | modal "Tampilkan NIK" dibuka | - |
+| `pendaftaran.kk_diunduh` | KK berhasil diunduh | - |
+| `pendaftaran.status` | bendera status berubah | `flag`, `value`, `applicant_id` |
+| `pendaftaran.catatan` | catatan panitia berubah | `applicant_id` (isi tidak dicatat) |
+| `pendaftaran.ekspor` | ekspor Excel/PDF | `format`, `count` |
+| `pendaftaran.dihapus` | pendaftar dihapus | `applicant_id` |
+
+### Unduh KK (`GET /admin/pendaftar/{id}/kk`, `pendaftar.kk`)
+
+Middleware `panel:admin` + `Filament\Http\Middleware\Authenticate` (tamu ke login admin, akun tanpa role 403) +
+`can:downloadKk,applicant`; id hanya angka. Respons: byte asli dari `KkStorage`, `Content-Type` dari amplop,
+`Content-Disposition: attachment; filename="kk-<id>.<ext>"`, `nosniff`, `Content-Security-Policy: sandbox;
+default-src 'none'` (SecurityHeaders Core tidak menimpa CSP yang sudah ditetapkan respons), `Cache-Control:
+private, no-store`. File tidak ada/rusak: 404 teks polos, log berisi id + nama kelas pengecualian saja.
+
+### Ekspor (`Exports/`)
+
+- Header "Ekspor Excel"/"Ekspor PDF" memakai `getFilteredSortedTableQuery()` (saringan + pencarian + urutan yang
+  sedang aktif, semua halaman); aksi massal mengekspor rekaman terpilih. Butuh `Export:Applicant`.
+- Excel (`ApplicantsExport::fromQuery`, maatwebsite/excel 4): dibaca per 200 baris, tanpa batas. Kolom: No, Nama,
+  NIK, TTL, Alamat lengkap, Pernah mondok, Pondok sebelumnya, Pendidikan terakhir, Jenjang, Kelas, Nama/HP
+  ayah, Nama/HP ibu, Wali, tiga status (Ya/Belum), Tanggal daftar. Semua sel bertipe string (nomor urut
+  angka), kolom NIK/HP berformat teks. Teks berawalan `=`, `+`, `-`, `@`, tab, CR diberi apostrof (injeksi formula).
+- PDF (`ApplicantsPdf::render`, dompdf, A4 lanskap): judul nama situs, tanggal ekspor, ringkasan saringan (kata
+  kunci NIK tidak ditulis ulang), jumlah. Maks `pendaftaran.pdf_max_rows` (500, env `PENDAFTARAN_PDF_MAX_ROWS`);
+  lebih dari itu aksi ditolak dengan pesan. Remote/PHP/JS dompdf mati, semua nilai di-escape.
+- NIK lengkap hanya bila pengekspor punya `RevealNik:Applicant`; selain itu tersamar. NIK yang tidak bisa
+  didekripsi tampil "(tidak terbaca)" dan ekspor tetap jalan (di tabel/detail: "— (tidak terbaca)").
+- Unduhan lewat respons Livewire (isi file dikirim base64 dalam respons JSON): cocok untuk ratusan sampai
+  beberapa ribu pendaftar.
+
 ### Pembatasan dan Turnstile
 
 - RateLimiter `daftar-langkah`: 30/menit per IP+sesi, 120/menit per IP. `daftar-kirim`: 3/menit per IP+sesi,

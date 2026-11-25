@@ -1,6 +1,8 @@
 <?php
 
+use Filament\Http\Middleware\Authenticate as FilamentAuthenticate;
 use Illuminate\Support\Facades\Route;
+use Modules\Pendaftaran\Http\Controllers\KkDownloadController;
 use Modules\Pendaftaran\Http\Controllers\RegistrationWizardController;
 
 /*
@@ -18,3 +20,13 @@ Route::middleware('cache.headers:no_store;private')->prefix('daftar')->group(fun
         ->middleware('throttle:daftar-kirim')->name('daftar.kirim');
     Route::get('/terima-kasih', [RegistrationWizardController::class, 'done'])->name('daftar.selesai');
 });
+
+/*
+ * Unduh file KK untuk panitia/admin. Di luar route panel Filament tetapi memakai panel "admin" dan
+ * middleware Authenticate Filament (tamu diarahkan ke login admin, akun tanpa role 403 lewat
+ * canAccessPanel), lalu izin downloadKk (ApplicantPolicy). Hanya id angka (route model binding).
+ */
+Route::get('/admin/pendaftar/{applicant}/kk', KkDownloadController::class)
+    ->whereNumber('applicant')
+    ->middleware(['panel:admin', FilamentAuthenticate::class, 'can:downloadKk,applicant'])
+    ->name('pendaftar.kk');

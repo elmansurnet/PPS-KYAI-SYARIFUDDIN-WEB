@@ -7,10 +7,14 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
+use Modules\Core\Support\AuditLog;
 use Modules\Pendaftaran\Database\Factories\ApplicantFactory;
+use Modules\Pendaftaran\Services\KkStorage;
 use Modules\Pendaftaran\Support\NikHasher;
 use Stringable;
+use Throwable;
 
 /**
  * Calon santri. Kelas disimpan sebagai teks (label KelasOption saat mendaftar) supaya riwayat
@@ -34,6 +38,8 @@ use Stringable;
  * @property bool $sudah_dihubungi
  * @property bool $sudah_bayar
  * @property bool $sudah_masuk
+ * @property string|null $catatan_panitia
+ * @property string|null $kk_path
  */
 class Applicant extends Model
 {
@@ -70,6 +76,25 @@ class Applicant extends Model
     protected static function newFactory(): Factory
     {
         return ApplicantFactory::new();
+    }
+
+    /**
+     * Saat pendaftar dihapus: file KK ikut dihapus dan penghapusan dicatat (id saja). Gagal menghapus
+     * file tidak membatalkan penghapusan; hanya nama kelas pengecualian yang dicatat di log.
+     */
+    protected static function booted(): void
+    {
+        static::deleted(function (Applicant $applicant) {
+            if (filled($applicant->kk_path)) {
+                try {
+                    app(KkStorage::class)->delete($applicant->kk_path);
+                } catch (Throwable $e) {
+                    Log::warning('pendaftaran: file KK gagal dihapus', ['applicant_id' => $applicant->getKey(), 'exception' => $e::class]);
+                }
+            }
+
+            AuditLog::record('pendaftaran.dihapus', $applicant, ['applicant_id' => $applicant->getKey()]);
+        });
     }
 
     /**

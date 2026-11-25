@@ -37,4 +37,11 @@ return [
         'kirim_per_menit_ip' => 10,
         'kirim_per_jam_ip' => 30,
     ],
+
+    /*
+     * Batas baris ekspor PDF (dompdf menyusun seluruh tabel di memori). Bila hasil saringan melebihi
+     * batas, ekspor PDF ditolak dengan pesan agar saringan dipersempit atau memakai Ekspor Excel
+     * (tanpa batas, dibaca bertahap per potongan).
+     */
+    'pdf_max_rows' => (int) env('PENDAFTARAN_PDF_MAX_ROWS', 500),
 ];

@@ -25,9 +25,13 @@ class SecurityHeaders
         $response = $next($request);
 
         $headers = $response->headers;
-        $headers->set('Content-Security-Policy', $this->isAdminSurface($request)
-            ? $this->adminPolicy()
-            : $this->publicPolicy());
+        // Respons yang sudah menetapkan CSP sendiri (mis. unduhan file dengan "sandbox; default-src 'none'",
+        // yang lebih ketat) tidak ditimpa. Hanya kode server yang bisa menetapkannya.
+        if (! $headers->has('Content-Security-Policy')) {
+            $headers->set('Content-Security-Policy', $this->isAdminSurface($request)
+                ? $this->adminPolicy()
+                : $this->publicPolicy());
+        }
         $headers->set('X-Content-Type-Options', 'nosniff');
         $headers->set('Referrer-Policy', 'strict-origin-when-cross-origin');
         $headers->set('Permissions-Policy', 'accelerometer=(), autoplay=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()');
