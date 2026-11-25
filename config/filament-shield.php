@@ -5,6 +5,9 @@ use BezhanSalleh\FilamentShield\Resources\Roles\RoleResource;
 use Filament\Pages\Dashboard;
 use Filament\Widgets\AccountWidget;
 use Filament\Widgets\FilamentInfoWidget;
+use Modules\Berita\Filament\Resources\PostResource;
+use Modules\Core\Filament\Pages\ManageSiteSettings;
+use Modules\Pendaftaran\Filament\Resources\ApplicantResource;
 
 return [
 
@@ -27,7 +30,7 @@ return [
             'pages' => true,
             'widgets' => true,
             'resources' => true,
-            'custom_permissions' => false,
+            'custom_permissions' => true,
         ],
     ],
 
@@ -193,6 +196,12 @@ return [
                 'update',
                 'delete',
             ],
+            // Izin khusus sumber daya (digabung dengan policies.methods karena merge = true), supaya
+            // tampil di editor role dan tidak hilang saat role disimpan. Nama hasil: Aksi:Model,
+            // mis. 'revealNik' -> RevealNik:Applicant. Harus sama dengan nama di policy dan seeder.
+            // Kelas modul hanya dirujuk sebagai string; modul yang nonaktif diabaikan Shield.
+            ApplicantResource::class => ['export', 'revealNik', 'downloadKk'],
+            PostResource::class => ['manageAll'],
         ],
         'exclude' => [
             //
@@ -215,6 +224,8 @@ return [
         'prefix' => 'view',
         'exclude' => [
             Dashboard::class,
+            // Diatur lewat izin khusus Manage:SiteSettings (lihat custom_permissions), bukan View:<Halaman>.
+            ManageSiteSettings::class,
         ],
     ],
 
@@ -252,7 +263,10 @@ return [
     |
     */
 
-    'custom_permissions' => [],
+    'custom_permissions' => [
+        // Halaman Pengaturan Situs (Modules\Core\Filament\Pages\ManageSiteSettings::PERMISSION).
+        'Manage:SiteSettings' => 'Kelola pengaturan situs',
+    ],
 
     /*
     |--------------------------------------------------------------------------

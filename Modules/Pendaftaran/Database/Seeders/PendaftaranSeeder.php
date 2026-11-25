@@ -3,8 +3,7 @@
 namespace Modules\Pendaftaran\Database\Seeders;
 
 use Illuminate\Database\Seeder;
-use Spatie\Permission\Models\Permission;
-use Spatie\Permission\Models\Role;
+use Modules\Core\Support\DefaultPermissions;
 use Spatie\Permission\PermissionRegistrar;
 
 /**
@@ -13,8 +12,10 @@ use Spatie\Permission\PermissionRegistrar;
  * - admin: semua izin data master dan pendaftar. superadmin: lewat Gate::before.
  * - panitia_pendaftaran: pendaftar saja (lihat, ubah status, ekspor, lihat NIK, unduh KK); TIDAK bisa menghapus.
  * - penulis_berita: tidak ada.
- * Izin hanya ditambahkan (givePermissionTo), tidak dicabut: perubahan superadmin dari panel tidak ditimpa,
- * kecuali izin baru yang belum pernah ada.
+ * Setiap izin bawaan diberikan ke role SEKALI saja (DefaultPermissions::grantOnce, dicatat di tabel
+ * seeded_role_permissions): izin yang dicabut superadmin dari panel tidak diberikan lagi saat seeder
+ * dijalankan ulang; hanya izin yang belum pernah diberikan (izin baru) yang ditambahkan. Tidak ada izin
+ * yang dicabut oleh seeder.
  * Data master awal ada di MasterDataSeeder (dipisah agar izin bisa diterapkan tanpa menyentuh data).
  */
 class PendaftaranSeeder extends Seeder
@@ -42,14 +43,10 @@ class PendaftaranSeeder extends Seeder
         $applicant = array_map(fn (string $action) => "{$action}:Applicant", self::APPLICANT_ACTIONS);
         $panitia = array_map(fn (string $action) => "{$action}:Applicant", self::PANITIA_APPLICANT_ACTIONS);
 
-        foreach ([...$master, ...$applicant] as $name) {
-            Permission::findOrCreate($name, 'web');
-        }
+        DefaultPermissions::ensure([...$master, ...$applicant]);
 
-        app(PermissionRegistrar::class)->forgetCachedPermissions();
-
-        Role::findOrCreate('admin', 'web')->givePermissionTo([...$master, ...$applicant]);
-        Role::findOrCreate('panitia_pendaftaran', 'web')->givePermissionTo($panitia);
+        DefaultPermissions::grantOnce('admin', [...$master, ...$applicant]);
+        DefaultPermissions::grantOnce('panitia_pendaftaran', $panitia);
 
         app(PermissionRegistrar::class)->forgetCachedPermissions();
     }

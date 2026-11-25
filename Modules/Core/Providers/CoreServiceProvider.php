@@ -3,10 +3,15 @@
 namespace Modules\Core\Providers;
 
 use Filament\Contracts\Plugin;
+use Filament\Facades\Filament;
+use Filament\Notifications\Notification;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
 use Modules\Core\Contracts\LatestNewsProvider;
 use Modules\Core\Support\Navigation;
 use Modules\Core\Support\NullLatestNewsProvider;
+use Spatie\Permission\Models\Role;
 
 class CoreServiceProvider extends ModuleServiceProvider
 {
@@ -22,14 +27,55 @@ class CoreServiceProvider extends ModuleServiceProvider
     {
         $this->app->bindIf(LatestNewsProvider::class, NullLatestNewsProvider::class);
 
-        // Tautan bawaan navbar publik. Modul Landing, Berita, dan Pendaftaran boleh menimpa
-        // item dengan kunci yang sama dari provider-nya sendiri (lihat Navigation).
+        // Core hanya mendaftarkan Beranda. Modul fitur menambah tautannya sendiri dari provider-nya
+        // (Berita: 'berita', Pendaftaran: 'pendaftaran'), jadi modul yang nonaktif tidak meninggalkan
+        // tautan yang berujung 404 (lihat Navigation).
         $this->app->singleton(Navigation::class, fn () => (new Navigation)
-            ->add('beranda', 'Beranda', '/', 10)
-            ->add('berita', 'Berita', '/berita', 20)
-            ->add('pendaftaran', 'Pendaftaran', '/daftar', 90, emphasis: true));
+            ->add('beranda', 'Beranda', '/', 10));
 
         $this->registerEnabledModules();
+    }
+
+    public function boot(): void
+    {
+        parent::boot();
+
+        $this->protectSuperadminRole();
+    }
+
+    public static function superadminRoleName(): string
+    {
+        return (string) config('filament-shield.super_admin.name', 'superadmin');
+    }
+
+    /**
+     * Gate superadmin bekerja berdasarkan NAMA role (filament-shield.super_admin.name) dan Gate::before
+     * melewati RolePolicy, jadi role itu dijaga di tingkat model: tidak boleh diganti nama/guard atau dihapus.
+     */
+    private function protectSuperadminRole(): void
+    {
+        $roleClass = config('permission.models.role', Role::class);
+
+        $refuse = function (string $message): never {
+            if (Filament::isServing()) {
+                Notification::make()->danger()->title($message)->send();
+            }
+
+            throw ValidationException::withMessages(['data.name' => $message]);
+        };
+
+        $roleClass::updating(function (Model $role) use ($refuse) {
+            if ($role->getOriginal('name') === self::superadminRoleName() && $role->isDirty(['name', 'guard_name'])) {
+                $refuse('Role superadmin tidak boleh diganti nama atau guard-nya.');
+            }
+        });
+
+        $roleClass::deleting(function (Model $role) use ($refuse) {
+            // Nama asli dari database, bukan atribut yang mungkin sudah diubah di memori.
+            if (in_array(self::superadminRoleName(), [$role->getOriginal('name'), $role->getAttribute('name')], true)) {
+                $refuse('Role superadmin tidak boleh dihapus.');
+            }
+        });
     }
 
     /**

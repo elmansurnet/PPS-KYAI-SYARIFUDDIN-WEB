@@ -5,14 +5,16 @@ namespace Modules\Core\Database\Seeders;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 use Spatie\Permission\Models\Permission;
-use Spatie\Permission\Models\Role;
+use Modules\Core\Support\DefaultPermissions;
 use Spatie\Permission\PermissionRegistrar;
 
 /**
- * Role dasar dan izin awalnya. Aman dijalankan ulang: setelah modul baru
- * menambah izin, jalankan `php artisan shield:generate --all --panel=admin --option=permissions`
- * (hanya izin; JANGAN tanpa --option karena menimpa UserPolicy buatan tangan), lalu jalankan
- * seeder ini lagi supaya role admin ikut menerima izin fitur yang baru.
+ * Role dasar dan izin awalnya. Aman dijalankan ulang dan TIDAK menimpa perubahan superadmin:
+ * izin bawaan diberikan sekali per pasangan (role, izin) lewat DefaultPermissions::grantOnce, jadi
+ * izin yang dicabut dari panel tetap tercabut. Izin yang belum pernah diberikan (mis. izin baru hasil
+ * `php artisan shield:generate --all --panel=admin --option=permissions` setelah modul baru) diberikan
+ * sekali ke admin saat seeder ini dijalankan lagi. JANGAN jalankan shield:generate tanpa
+ * --option=permissions karena menimpa policy buatan tangan.
  */
 class RoleSeeder extends Seeder
 {
@@ -30,12 +32,10 @@ class RoleSeeder extends Seeder
     {
         app(PermissionRegistrar::class)->forgetCachedPermissions();
 
-        foreach (self::CORE_PERMISSIONS as $name) {
-            Permission::findOrCreate($name, 'web');
-        }
+        DefaultPermissions::ensure(self::CORE_PERMISSIONS);
 
         foreach (self::ROLES as $name) {
-            Role::findOrCreate($name, 'web');
+            DefaultPermissions::role($name);
         }
 
         // superadmin: semua lewat Gate::before (Shield), tanpa izin eksplisit.
@@ -45,7 +45,7 @@ class RoleSeeder extends Seeder
             ->where('guard_name', 'web')
             ->where('name', 'not like', '%:Role')
             ->get();
-        Role::findByName('admin', 'web')->syncPermissions($featurePermissions);
+        DefaultPermissions::grantOnce('admin', $featurePermissions->pluck('name'));
 
         $this->seedSuperadmin();
 

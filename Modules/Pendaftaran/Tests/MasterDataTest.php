@@ -106,3 +106,20 @@ test('jenjang in use by an applicant cannot be deleted from the list', function 
     Livewire::test(ListJenjangs::class)
         ->assertTableActionHidden('delete', $jenjang);
 });
+
+test('master data deleted or renamed by admin is not resurrected by re-seeding', function () {
+    $this->seed(MasterDataSeeder::class);
+
+    Jenjang::where('name', 'SMA/MA/SMK')->firstOrFail()->kelasOptions()->delete();
+    Jenjang::where('name', 'SMA/MA/SMK')->delete();
+    Jenjang::where('name', 'SMP/MTs')->update(['name' => 'MTs']);
+    KelasOption::where('name', 'Kelas 9')->delete();
+    PendidikanTerakhir::where('name', 'SD/MI')->delete();
+
+    $this->seed(MasterDataSeeder::class);
+
+    expect(Jenjang::pluck('name')->all())->toBe(['MTs'])
+        ->and(KelasOption::pluck('name')->sort()->values()->all())->toBe(['Kelas 7', 'Kelas 8'])
+        ->and(PendidikanTerakhir::where('name', 'SD/MI')->exists())->toBeFalse()
+        ->and(PendidikanTerakhir::count())->toBe(3);
+});

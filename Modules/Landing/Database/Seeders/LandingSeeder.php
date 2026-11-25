@@ -4,13 +4,13 @@ namespace Modules\Landing\Database\Seeders;
 
 use Illuminate\Database\Seeder;
 use Modules\Landing\Models\LandingSection;
-use Spatie\Permission\Models\Permission;
-use Spatie\Permission\Models\Role;
+use Modules\Core\Support\DefaultPermissions;
 use Spatie\Permission\PermissionRegistrar;
 
 /**
  * Struktur awal beranda dan izin Landing. Aman dijalankan ulang: bagian yang sudah ada
- * tidak ditimpa (firstOrCreate), dan role admin hanya ditambah izin (tidak dikurangi).
+ * tidak ditimpa (firstOrCreate; bagian tidak dapat dihapus dari panel), dan izin bawaan diberikan ke
+ * admin SEKALI saja (DefaultPermissions::grantOnce): izin yang dicabut superadmin tidak diberikan lagi.
  *
  * Bagian baru dibuat tersembunyi sampai admin mengisinya, kecuali hero dan ajakan_daftar
  * yang punya teks netral cadangan di tampilan (nama situs, tautan ke /daftar).
@@ -42,15 +42,10 @@ class LandingSeeder extends Seeder
 
         app(PermissionRegistrar::class)->forgetCachedPermissions();
 
-        foreach (self::PERMISSIONS as $name) {
-            Permission::findOrCreate($name, 'web');
-        }
-
-        // Seeder dari db:seed berjalan tanpa event model, jadi cache izin tidak otomatis dibuang.
-        app(PermissionRegistrar::class)->forgetCachedPermissions();
+        DefaultPermissions::ensure(self::PERMISSIONS);
 
         // Hanya admin; penulis_berita dan panitia_pendaftaran tidak menerima izin Landing.
-        Role::findOrCreate('admin', 'web')->givePermissionTo(self::PERMISSIONS);
+        DefaultPermissions::grantOnce('admin', self::PERMISSIONS);
 
         app(PermissionRegistrar::class)->forgetCachedPermissions();
     }

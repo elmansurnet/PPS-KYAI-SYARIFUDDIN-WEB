@@ -7,8 +7,11 @@ namespace Modules\Core\Support;
  *
  * Modul menambah atau mengganti item lewat kuncinya di boot() provider-nya, misalnya
  * app(Navigation::class)->add('berita', 'Berita', '/berita', 20). Dengan begitu navbar
- * milik Core tidak perlu mengenal modul mana pun. Item bawaan Core (beranda, berita,
- * pendaftaran) tetap ada walau modulnya belum aktif dan akan ditimpa modul bila perlu.
+ * milik Core tidak perlu mengenal modul mana pun. Core hanya mendaftarkan 'beranda'; item lain
+ * hanya ada bila modulnya aktif (Berita: 'berita', Pendaftaran: 'pendaftaran').
+ *
+ * Modul lain memakai path() / has() untuk menautkan halaman modul lain tanpa mengimpor kelasnya,
+ * mis. Landing menampilkan tombol daftar hanya bila 'pendaftaran' terdaftar.
  */
 class Navigation
 {
@@ -31,6 +34,17 @@ class Navigation
         unset($this->items[$key]);
 
         return $this;
+    }
+
+    public function has(string $key): bool
+    {
+        return isset($this->items[$key]);
+    }
+
+    /** Path item (mis. "/daftar"), atau null bila modul pemiliknya tidak aktif. */
+    public function path(string $key): ?string
+    {
+        return $this->items[$key]['path'] ?? null;
     }
 
     /**

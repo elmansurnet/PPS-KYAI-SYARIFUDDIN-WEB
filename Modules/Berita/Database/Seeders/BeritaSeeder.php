@@ -3,13 +3,13 @@
 namespace Modules\Berita\Database\Seeders;
 
 use Illuminate\Database\Seeder;
-use Spatie\Permission\Models\Permission;
-use Spatie\Permission\Models\Role;
+use Modules\Core\Support\DefaultPermissions;
 use Spatie\Permission\PermissionRegistrar;
 
 /**
- * Izin Berita (konvensi Shield: Aksi:Model). Aman dijalankan ulang: izin dibuat bila belum ada
- * dan role hanya ditambah izin (tidak dikurangi). Jalankan setelah RoleSeeder.
+ * Izin Berita (konvensi Shield: Aksi:Model). Aman dijalankan ulang: izin dibuat bila belum ada dan
+ * setiap izin bawaan diberikan ke role SEKALI saja (DefaultPermissions::grantOnce), sehingga izin yang
+ * dicabut superadmin dari panel tidak diberikan lagi. Jalankan setelah RoleSeeder.
  *
  * - admin: semua izin Berita, termasuk ManageAll:Post (melewati pemeriksaan kepemilikan).
  * - penulis_berita: Post (lihat, buat, ubah, hapus; ubah/hapus hanya milik sendiri, lihat PostPolicy)
@@ -34,15 +34,10 @@ class BeritaSeeder extends Seeder
 
         $all = [...self::WRITER_PERMISSIONS, ...self::ADMIN_ONLY_PERMISSIONS];
 
-        foreach ($all as $name) {
-            Permission::findOrCreate($name, 'web');
-        }
+        DefaultPermissions::ensure($all);
 
-        // Seeder dari db:seed berjalan tanpa event model, jadi cache izin tidak otomatis dibuang.
-        app(PermissionRegistrar::class)->forgetCachedPermissions();
-
-        Role::findOrCreate('admin', 'web')->givePermissionTo($all);
-        Role::findOrCreate('penulis_berita', 'web')->givePermissionTo(self::WRITER_PERMISSIONS);
+        DefaultPermissions::grantOnce('admin', $all);
+        DefaultPermissions::grantOnce('penulis_berita', self::WRITER_PERMISSIONS);
 
         app(PermissionRegistrar::class)->forgetCachedPermissions();
     }

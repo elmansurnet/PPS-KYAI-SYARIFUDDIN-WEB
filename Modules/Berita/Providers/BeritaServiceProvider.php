@@ -12,6 +12,7 @@ use Modules\Berita\Policies\PostPolicy;
 use Modules\Berita\Support\LatestNews;
 use Modules\Core\Contracts\LatestNewsProvider;
 use Modules\Core\Providers\ModuleServiceProvider;
+use Modules\Core\Support\Navigation;
 
 class BeritaServiceProvider extends ModuleServiceProvider
 {
@@ -38,5 +39,9 @@ class BeritaServiceProvider extends ModuleServiceProvider
 
         Gate::policy(Post::class, PostPolicy::class);
         Gate::policy(Category::class, CategoryPolicy::class);
+
+        // Tautan navbar/footer hanya ada bila modul ini aktif; Landing juga memakai kunci ini
+        // untuk tautan "Lihat semua berita".
+        app(Navigation::class)->add('berita', 'Berita', '/berita', 20);
     }
 }
