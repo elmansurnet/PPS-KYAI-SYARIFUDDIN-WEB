@@ -60,7 +60,7 @@ pekerjaan wajib. Keduanya meninggal: wali (nama, pekerjaan, HP, alamat) wajib, H
 
 ### File KK (`Services/KkStorage`)
 
-- Disk `kk` (config/filesystems.php, driver `kk_private` = `Support/PrivateDiskAdapter`): `storage/app/private/kk`,
+- Disk `kk` (config/filesystems.php, driver `kk_private` = `Support/PrivateDiskAdapter`): `storage/app/kk` (di luar root disk `local` = `storage/app/private`),
   `url()`/`temporaryUrl()` melempar pengecualian, tidak ada route storage.
 - Nama `YYYY/MM/<ulid>.kk`; nama dan ekstensi asli tidak dipakai.
 - Isi: `Crypt::encryptString(json_encode({"v":1,"mime":"...","data":"<base64>"}))`. `contents()` mengembalikan

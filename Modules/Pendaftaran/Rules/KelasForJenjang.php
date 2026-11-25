@@ -23,18 +23,27 @@ class KelasForJenjang implements DataAwareRule, ValidationRule
         return $this;
     }
 
+    /**
+     * Nama kelas kanonis (persis seperti di master data) untuk kelas aktif milik jenjang aktif, atau null.
+     * Pencocokan tidak peka huruf besar/kecil dan tidak bergantung collation database.
+     */
+    public static function canonical(int $jenjangId, string $value): ?string
+    {
+        $wanted = mb_strtolower(trim($value));
+
+        return KelasOption::query()
+            ->where('jenjang_id', $jenjangId)
+            ->where('is_active', true)
+            ->whereHas('jenjang', fn ($q) => $q->where('is_active', true))
+            ->pluck('name')
+            ->first(fn (string $name) => mb_strtolower($name) === $wanted);
+    }
+
     public function validate(string $attribute, mixed $value, Closure $fail): void
     {
         $jenjangId = $this->data['jenjang_id'] ?? null;
 
-        $exists = is_string($value) && is_numeric($jenjangId) && KelasOption::query()
-            ->where('jenjang_id', (int) $jenjangId)
-            ->where('name', $value)
-            ->where('is_active', true)
-            ->whereHas('jenjang', fn ($q) => $q->where('is_active', true))
-            ->exists();
-
-        if (! $exists) {
+        if (! is_string($value) || ! is_numeric($jenjangId) || self::canonical((int) $jenjangId, $value) === null) {
             $fail('Kelas yang dipilih tidak tersedia untuk jenjang tersebut.');
         }
     }

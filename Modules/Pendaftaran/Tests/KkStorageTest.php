@@ -82,7 +82,7 @@ test('kk disk is private, outside public and has no url', function () {
     $default = str_replace('\\', '/', (string) app('config')->get('filesystems.disks.kk.root'));
 
     expect(str_replace('\\', '/', $root))->not->toStartWith(str_replace('\\', '/', public_path()))
-        ->and(str_replace('\\', '/', storage_path('app/private/kk')))->not->toStartWith(str_replace('\\', '/', public_path()))
+        ->and(str_replace('\\', '/', storage_path('app/kk')))->not->toStartWith(str_replace('\\', '/', public_path()))
         ->and(config('filesystems.disks.kk.driver'))->not->toBe('local')
         ->and(config('filesystems.disks.kk'))->not->toHaveKey('url')
         ->and(Route::has('storage.kk'))->toBeFalse()
@@ -92,8 +92,8 @@ test('kk disk is private, outside public and has no url', function () {
         ->and(fn () => Storage::disk('kk')->temporaryUrl('x.kk', now()->addMinute()))->toThrow(RuntimeException::class);
 });
 
-test('production kk disk root is storage/app/private/kk', function () {
+test('production kk disk root is storage/app/kk', function () {
     $config = require base_path('config/filesystems.php');
 
-    expect(str_replace('\\', '/', $config['disks']['kk']['root']))->toBe(str_replace('\\', '/', storage_path('app/private/kk')));
+    expect(str_replace('\\', '/', $config['disks']['kk']['root']))->toBe(str_replace('\\', '/', storage_path('app/kk')));
 });

@@ -32,7 +32,7 @@ abstract class ModuleServiceProvider extends ServiceProvider
             $this->loadMigrationsFrom($path.'/Database/Migrations');
         }
 
-        if (is_file($path.'/Routes/web.php')) {
+        if (is_file($path.'/Routes/web.php') && ! $this->app->routesAreCached()) {
             Route::middleware('web')->group($path.'/Routes/web.php');
         }
 

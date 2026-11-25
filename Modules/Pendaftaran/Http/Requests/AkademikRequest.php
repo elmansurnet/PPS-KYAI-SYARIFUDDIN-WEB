@@ -75,7 +75,7 @@ class AkademikRequest extends WizardStepRequest
             'pendidikan_pondok_sebelumnya' => $mondok ? $valid['pendidikan_pondok_sebelumnya'] : null,
             'pendidikan_terakhir_id' => (int) $valid['pendidikan_terakhir_id'],
             'jenjang_id' => (int) $valid['jenjang_id'],
-            'kelas' => $valid['kelas'],
+            'kelas' => KelasForJenjang::canonical((int) $valid['jenjang_id'], (string) $valid['kelas']) ?? $valid['kelas'],
         ];
     }
 }

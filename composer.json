@@ -89,6 +89,7 @@
     },
     "config": {
         "optimize-autoloader": false,
+        "process-timeout": 0,
         "preferred-install": "dist",
         "sort-packages": true,
         "allow-plugins": {

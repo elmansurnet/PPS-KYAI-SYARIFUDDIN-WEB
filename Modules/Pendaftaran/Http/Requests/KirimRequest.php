@@ -7,11 +7,13 @@ use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Contracts\Validation\Validator as ValidatorContract;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Http\Exceptions\HttpResponseException;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Modules\Core\Rules\TurnstileRule;
 use Modules\Pendaftaran\Rules\KkFile;
 use Modules\Pendaftaran\Support\KkFileInspector;
 use Modules\Pendaftaran\Support\WizardSteps;
+use Throwable;
 
 /**
  * Langkah 4: file KK dan verifikasi Turnstile. Data langkah 1-3 divalidasi ulang terpisah oleh controller.
@@ -58,11 +60,20 @@ class KirimRequest extends FormRequest
 
     public static function turnstileAvailable(): bool
     {
-        if (filled(config('services.turnstile.site_key'))) {
+        if (filled(config('services.turnstile.site_key')) && filled(config('services.turnstile.secret'))) {
             return true;
         }
 
-        Log::error('Turnstile tidak dikonfigurasi: services.turnstile.site_key (env TURNSTILE_SITE_KEY) kosong; formulir pendaftaran diblokir.');
+        // Paling banyak sekali per jendela 5 menit (bukan tiap GET) agar log tidak membanjir.
+        try {
+            $first = Cache::add('pendaftaran:turnstile-unconfigured-logged', 1, now()->addMinutes(5));
+        } catch (Throwable) {
+            $first = true;
+        }
+
+        if ($first) {
+            Log::error('Turnstile tidak dikonfigurasi: TURNSTILE_SITE_KEY dan/atau TURNSTILE_SECRET_KEY kosong; formulir pendaftaran diblokir.');
+        }
 
         return false;
     }

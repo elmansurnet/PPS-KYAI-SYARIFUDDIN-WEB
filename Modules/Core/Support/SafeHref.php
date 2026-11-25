@@ -11,7 +11,8 @@ class SafeHref
 {
     public static function sanitize(?string $href): string
     {
-        $href = trim((string) $href);
+        // Peramban membuang tab, baris baru, dan karakter kontrol saat mengurai URL: "/<TAB>/evil.com" menjadi "//evil.com".
+        $href = preg_replace('/[\x00-\x20]/', '', (string) $href) ?? '';
 
         if (preg_match('~^(/(?![/\\\\])|#|https?://[^/\\\\\s]|mailto:|tel:)~i', $href) !== 1) {
             return '#';
