@@ -46,3 +46,28 @@ test('backup runs only when the archive password is set', function () {
     config(['backup.backup.password' => 'rahasia']);
     expect($events->first()->filtersPass(app()))->toBeTrue();
 });
+
+test('mysql and mariadb dumps skip tablespaces so a non-root db user can back up', function (string $connection) {
+    expect(config("database.connections.{$connection}.dump.add_extra_option"))->toBe('--no-tablespaces')
+        ->and(config("database.connections.{$connection}.dump.use_single_transaction"))->toBeTrue();
+})->with(['mysql', 'mariadb']);
+
+test('manual backup:run refuses in production without an archive password', function () {
+    $event = fn () => new Illuminate\Console\Events\CommandStarting(
+        'backup:run',
+        new Symfony\Component\Console\Input\ArrayInput([]),
+        new Symfony\Component\Console\Output\NullOutput,
+    );
+
+    config(['backup.backup.password' => null]);
+    app()->detectEnvironment(fn () => 'production');
+    expect(fn () => event($event()))->toThrow(RuntimeException::class, 'BACKUP_ARCHIVE_PASSWORD');
+
+    config(['backup.backup.password' => 'rahasia']);
+    expect(fn () => event($event()))->not->toThrow(RuntimeException::class);
+
+    // Di luar production (dev/tes) tidak diblokir.
+    app()->detectEnvironment(fn () => 'local');
+    config(['backup.backup.password' => null]);
+    expect(fn () => event($event()))->not->toThrow(RuntimeException::class);
+});

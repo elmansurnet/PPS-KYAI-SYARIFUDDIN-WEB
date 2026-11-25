@@ -710,8 +710,8 @@ test('santri fields are validated with Indonesian messages', function (array $ov
 })->with([
     'nama dengan angka' => [['nama_lengkap' => 'Ahmad 123'], 'nama_lengkap', 'Nama lengkap hanya boleh berisi huruf, spasi, titik, koma, apostrof, dan tanda hubung.'],
     'nama terlalu panjang' => [['nama_lengkap' => str_repeat('a', 101)], 'nama_lengkap', 'Nama lengkap maksimal 100 karakter.'],
-    'tempat lahir html' => [['tempat_lahir' => '<b>Bogor</b>'], 'tempat_lahir', 'Tempat lahir tidak boleh memuat tanda < atau > maupun karakter kontrol.'],
-    'karakter kontrol' => [['desa' => "Suka\x07maju"], 'desa', 'Desa/kelurahan tidak boleh memuat tanda < atau > maupun karakter kontrol.'],
+    'tempat lahir html' => [['tempat_lahir' => '<b>Bogor</b>'], 'tempat_lahir', 'Tempat lahir tidak boleh memuat tanda < atau > maupun karakter kontrol atau pengarah teks.'],
+    'karakter kontrol' => [['desa' => "Suka\x07maju"], 'desa', 'Desa/kelurahan tidak boleh memuat tanda < atau > maupun karakter kontrol atau pengarah teks.'],
     'tanggal tidak nyata' => [['tanggal_lahir' => '2014-02-30'], 'tanggal_lahir', 'Tanggal lahir tidak valid. Gunakan format tanggal-bulan-tahun, mis. 17-08-2014.'],
     'tanggal masa depan' => fn () => [['tanggal_lahir' => now()->addDay()->format('Y-m-d')], 'tanggal_lahir', 'Tanggal lahir tidak sesuai untuk calon santri (usia 5 sampai 30 tahun).'],
     'terlalu muda' => fn () => [['tanggal_lahir' => now()->subYears(4)->format('Y-m-d')], 'tanggal_lahir', 'Tanggal lahir tidak sesuai untuk calon santri (usia 5 sampai 30 tahun).'],

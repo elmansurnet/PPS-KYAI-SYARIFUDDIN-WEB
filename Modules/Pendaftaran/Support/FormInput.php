@@ -19,6 +19,10 @@ class FormInput
             return null;
         }
 
+        // Karakter tak terlihat non-bidi (ZWSP/ZWNJ/ZWJ U+200B-200D, soft hyphen U+00AD, word joiner U+2060, BOM U+FEFF)
+        // sering ikut tertempel dari WhatsApp/Word; dibuang diam-diam. Karakter bidi ditolak oleh PlainText.
+        $value = preg_replace('/[\x{00AD}\x{200B}-\x{200D}\x{2060}\x{FEFF}]/u', '', $value) ?? $value;
+
         $clean = preg_replace('/\s+/u', ' ', $value);
 
         // UTF-8 rusak: biarkan apa adanya supaya ditolak aturan PlainText.

@@ -6,7 +6,7 @@ Panduan ini untuk server lokal/VPS dengan aaPanel (Nginx + PHP-FPM + MySQL) yang
 
 ## 1. Prasyarat
 
-- PHP 8.3 dengan ekstensi: `pdo_mysql`, `mbstring`, `intl`, `gd`, `zip`, `fileinfo`, `bcmath`, `openssl`, `curl`, `xml`, `dom`, `exif`, `ctype`, `tokenizer`. (`sqlite` tidak diperlukan di production; hanya untuk tes.) Fungsi `proc_open` dan `exec` jangan masuk `disable_functions` (dipakai `mysqldump` oleh cadangan; di aaPanel biasanya perlu dihapus dari daftar itu).
+- PHP 8.3 dengan ekstensi: `pdo_mysql`, `mbstring`, `intl`, `gd`, `zip`, `fileinfo`, `bcmath`, `openssl`, `curl`, `xml`, `dom`, `exif`, `ctype`, `tokenizer`. (`sqlite` tidak diperlukan di production; hanya untuk tes.) Fungsi `proc_open` jangan masuk `disable_functions` (dipakai Symfony Process untuk menjalankan `mysqldump` oleh cadangan; di aaPanel biasanya perlu dihapus dari daftar itu). Fungsi lain (mis. `exec`) tidak perlu dibuka.
 - MySQL 8 (atau MariaDB setara) dan biner `mysqldump` (aaPanel: `/www/server/mysql/bin`).
 - Composer 2.
 - Node 22 hanya untuk build aset (boleh di mesin lain, lalu salin `public/build`).
@@ -30,15 +30,18 @@ Panduan ini untuk server lokal/VPS dengan aaPanel (Nginx + PHP-FPM + MySQL) yang
    }
    ```
 
+   Pastikan `client_max_body_size` Nginx minimal `8m` (bawaan stok Nginx 1 MB akan menolak unggahan KK dengan 413; bawaan aaPanel 50m sudah cukup).
+
 4. Tolak berkas tersembunyi dan direktori internal (di konfigurasi situs, sebelum blok `location ~ \.php$`):
 
    ```nginx
    location ~ /\.(?!well-known) { deny all; }
-   location ~ ^/(storage|vendor|bootstrap|config|database|Modules|tests) { deny all; }
-   location ~* \.(env|log|sql|bak|zip|tar|gz|md|lock)$ { deny all; }
+   location ~ ^/(vendor|bootstrap|config|database|Modules|tests|resources|routes|app)/ { deny all; }
+   location ~ ^/storage/(app|framework|logs)/ { deny all; }
+   location ~* ^/(composer\.(json|lock)|artisan|package(-lock)?\.json)$ { deny all; }
    ```
 
-   Karena root = `public/`, folder itu sebenarnya sudah tidak terjangkau; aturan ini lapis kedua. Jangan pernah menaruh `.env`, cadangan, atau ekspor di dalam `public/`.
+   **Jangan memblokir `/storage/` secara menyeluruh**: `storage:link` membuat `public/storage` (isi `storage/app/public`) yang melayani logo, gambar berita, galeri, dan PDF biaya; hanya `app`, `framework`, dan `logs` yang ditolak. Perlindungan utamanya adalah root Nginx = `public/`: folder di luar `public/` memang tidak terjangkau web; aturan di atas hanya lapis kedua (dotfile seperti `.env` sudah ditolak aturan pertama). Jangan pernah menaruh `.env`, cadangan, atau ekspor di dalam `public/`. Jangan memblokir ekstensi umum (`.json`, `.md`, `.zip`) secara global, karena bisa mematikan berkas unggahan yang sah.
 5. Origin hanya untuk tunnel (bagian 7): Nginx **harus** mendengarkan `127.0.0.1` saja (mis. `listen 127.0.0.1:80;`) atau port 80/443 diblokir dari luar oleh firewall.
 
 ## 3. Checklist `.env` production
@@ -47,6 +50,7 @@ Panduan ini untuk server lokal/VPS dengan aaPanel (Nginx + PHP-FPM + MySQL) yang
 APP_NAME="PPs Kyai Syarifuddin"
 APP_ENV=production
 APP_DEBUG=false
+APP_TIMEZONE=Asia/Jakarta                   # jadwal cadangan 02:00 mengikuti zona ini
 APP_URL=https://pendaftaran.contoh.sch.id   # WAJIB: URL HTTPS publik, tanpa slash akhir
 APP_KEY=                                    # php artisan key:generate (SEKALI, bagian 4)
 
@@ -64,6 +68,9 @@ DB_DUMP_BINARY_PATH=/www/server/mysql/bin   # folder mysqldump, untuk cadangan
 
 SESSION_DRIVER=database
 SESSION_ENCRYPT=true
+SESSION_SECURE_COOKIE=true                  # wajib: tanpa ini cookie sesi tidak bertanda Secure
+SESSION_HTTP_ONLY=true                      # bawaan true; jangan dimatikan
+SESSION_SAME_SITE=lax                       # bawaan lax
 SESSION_LIFETIME=120
 CACHE_STORE=database                        # atau file
 QUEUE_CONNECTION=database                   # antrean tidak dipakai (ekspor langsung); nilai ini aman
@@ -77,7 +84,7 @@ SUPERADMIN_EMAIL=admin@contoh.sch.id        # hanya untuk seed pertama; hapus se
 SUPERADMIN_PASSWORD=...                     # sandi panjang acak; HAPUS dari .env setelah seed
 
 BACKUP_ARCHIVE_PASSWORD=...                 # php -r "echo bin2hex(random_bytes(24));"
-BACKUP_NOTIFICATION_EMAIL=                  # opsional; butuh MAIL_* yang benar
+BACKUP_NOTIFICATION_EMAIL=...                # SANGAT disarankan (bagian 8); butuh MAIL_* yang benar
 ```
 
 Catatan:
@@ -88,17 +95,25 @@ Catatan:
 
 ## 4. Pemasangan pertama
 
+**Jalankan semua perintah `composer`/`php artisan` sebagai user `www`, bukan root** (root membuat berkas milik root di `storage/` dan `bootstrap/cache/` yang tidak bisa ditulis PHP-FPM). Di aaPanel `www` tidak punya shell login, jadi pakai `sudo -u www -H <perintah>`; PHP aaPanel ada di `/www/server/php/83/bin/php` (pola `/www/server/php/<versi tanpa titik>/bin/php`). Di bawah, `php` berarti `sudo -u www -H /www/server/php/83/bin/php` dan `composer` berarti `sudo -u www -H /www/server/php/83/bin/php /usr/bin/composer`. Bila ada yang pernah dijalankan sebagai root: `chown -R www:www storage bootstrap/cache`.
+
+Urutan (tiap langkah bergantung pada langkah sebelumnya):
+
 ```bash
-composer install --no-dev --optimize-autoloader
-npm ci && npm run build            # atau build di mesin lain dan salin public/build
-cp .env.example .env               # lalu isi sesuai bagian 3
-php artisan key:generate           # SEKALI SAJA. Menjalankannya lagi membuat data terenkripsi tak terbaca.
-php artisan migrate --force
-php artisan db:seed --force        # RoleSeeder (role + superadmin), lalu seeder modul (Landing, Berita, Pendaftaran + data master)
-php artisan shield:generate --all --panel=admin --option=permissions
-php artisan filament:upgrade       # publikasi aset Filament
-php artisan storage:link           # hanya untuk storage/app/public (gambar situs/berita)
-php artisan optimize               # config, route, view, event cache
+cd /www/wwwroot/pps
+cp .env.example .env               # 1. buat dan ISI .env dulu sesuai bagian 3 (APP_KEY dibiarkan kosong)
+chown www:www .env && chmod 640 .env
+CACHE_STORE=array composer install --no-dev --optimize-autoloader
+                                   # 2. hook post-autoload-dump menjalankan filament:upgrade yang memakai cache;
+                                   #    CACHE_STORE=array menghindari butuh tabel cache sebelum migrasi
+npm ci && npm run build            # 3. atau build di mesin lain dan salin public/build
+php artisan key:generate           # 4. SEKALI SAJA. Menjalankannya lagi membuat data terenkripsi tak terbaca.
+php artisan migrate --force        # 5. buat tabel (termasuk cache dan sesi)
+php artisan db:seed --force        # 6. RoleSeeder (role + superadmin), lalu seeder modul (Landing, Berita, Pendaftaran + data master)
+php artisan shield:generate --all --panel=admin --option=permissions   # 7. izin Shield
+php artisan filament:upgrade       # 8. publikasi aset Filament
+php artisan storage:link           # 9. hanya untuk storage/app/public (gambar situs/berita)
+php artisan optimize               # 10. config, route, view, event cache
 ```
 
 Catatan:
@@ -107,15 +122,15 @@ Catatan:
 - **Jangan** menjalankan `shield:generate` tanpa `--option=permissions`: opsi lain menimpa policy yang sudah disesuaikan (mis. `UserPolicy`).
 - Setelah seed pertama berhasil, **hapus `SUPERADMIN_EMAIL` dan `SUPERADMIN_PASSWORD` dari `.env`**, lalu `php artisan config:cache`.
 - Jalankan `php artisan optimize:clear && php artisan optimize` setiap `.env` berubah.
-- Izin berkas: `chown -R www:www storage bootstrap/cache` dan `chmod -R ug+rwX storage bootstrap/cache`.
+- Izin berkas: `chown -R www:www storage bootstrap/cache` dan `chmod -R ug+rwX storage bootstrap/cache` (ulangi bila sesuatu pernah dijalankan sebagai root).
 - Instalasi lama yang menyimpan KK di `storage/app/private/kk` (lokasi lama): pindahkan sekali dengan `[ -d storage/app/private/kk ] && mv storage/app/private/kk storage/app/kk`. Root disk `kk` sekarang `storage/app/kk`, di luar root disk `local` (`storage/app/private`).
 
 ## 5. Penjadwal (scheduler)
 
-Cadangan harian berjalan lewat penjadwal Laravel. Tambahkan cron (aaPanel: Cron > Shell script, tiap menit, user `www`):
+Cadangan harian berjalan lewat penjadwal Laravel. Tambahkan cron (aaPanel: Cron > Shell script, tiap menit). Tugas cron aaPanel berjalan sebagai **root**; jangan jalankan `artisan` sebagai root (berkas log, cadangan, dan `backup-temp` milik root tidak bisa ditulis PHP-FPM). Jalankan sebagai `www`:
 
 ```
-* * * * * cd /www/wwwroot/pps && php artisan schedule:run >> /dev/null 2>&1
+cd /www/wwwroot/pps && sudo -u www /www/server/php/83/bin/php artisan schedule:run >> /dev/null 2>&1
 ```
 
 Periksa dengan `php artisan schedule:list` (harus tampil `backup:run` 02:00, `backup:clean` 02:30, `backup:monitor` 03:00). Cadangan hanya berjalan bila `BACKUP_ARCHIVE_PASSWORD` terisi; tanpa sandi arsip tidak terenkripsi, jadi sengaja ditolak dan dicatat ke log.
@@ -124,7 +139,10 @@ Periksa dengan `php artisan schedule:list` (harus tampil `backup:run` 02:00, `ba
 
 Pembaruan:
 
+(Semua sebagai `www`, lihat bagian 4.)
+
 ```bash
+git describe --tags --always       # CATAT rilis yang sedang berjalan (atau beri tag: git tag rilis-YYYYMMDD)
 php artisan backup:run             # cadangan dulu; pastikan berhasil
 php artisan down --retry=60
 git pull                           # atau unggah rilis baru
@@ -132,25 +150,28 @@ composer install --no-dev --optimize-autoloader
 npm ci && npm run build
 php artisan migrate --force
 php artisan filament:upgrade
+# Bila rilis menambah resource/modul: buat izin lalu beri ke role lewat seeder
+php artisan shield:generate --all --panel=admin --option=permissions
+php artisan db:seed --force        # seeder bersifat idempoten (firstOrCreate); atau --class=<seeder modul> saja
 php artisan optimize:clear && php artisan optimize
 php artisan up
 ```
 
-Rollback: `php artisan down`, kembalikan kode ke rilis sebelumnya (`git checkout <tag>` lalu `composer install --no-dev`), bila migrasi baru merusak data pulihkan database dari cadangan (bagian 9), lalu `optimize` dan `up`. Jangan pernah mengubah `APP_KEY` saat rollback.
+Rollback: `php artisan down`, kembalikan kode ke rilis yang dicatat sebelum pembaruan (`git checkout <tag>` lalu `composer install --no-dev`), bila migrasi baru merusak data pulihkan database dari cadangan (bagian 9), lalu `optimize` dan `up`. Jangan pernah mengubah `APP_KEY` saat rollback.
 
 ## 7. Cloudflare Tunnel
 
 - `cloudflared` berjalan di host yang sama. Public hostname di Zero Trust (Networks > Tunnels) menunjuk ke `http://127.0.0.1:80`.
 - **Host publik tunnel harus sama dengan host `APP_URL`.** `TrustHosts` hanya menerima host itu; tidak ada alias `www` atau apex kecuali ditambahkan ke kode. Header Host yang diteruskan ke origin harus host publik (jangan ditimpa ke `localhost`).
 - **Origin hanya `127.0.0.1`.** Aplikasi mempercayai `X-Forwarded-For` dan `X-Forwarded-Proto` dari semua proxy (`*`) karena satu-satunya pihak yang berbicara ke origin adalah `cloudflared` lokal. Bila origin bisa dijangkau langsung dari LAN/internet, penyerang dapat memalsukan IP (melewati pembatas laju per IP dan mengotori log audit) dan skema. Karena itu: Nginx `listen 127.0.0.1:80`, firewall menutup 80/443/3306 dari luar, dan port panel aaPanel jangan dibuka ke publik tanpa pembatasan.
-- Health check/uptime harus mengirim header `Host` publik, mis. `curl -H "Host: pendaftaran.contoh.sch.id" http://127.0.0.1/up`; tanpa itu hasilnya 400 (host tak tepercaya).
+- Health check/uptime harus mengirim header `Host` publik, mis. `curl -H "Host: pendaftaran.contoh.sch.id" http://127.0.0.1/up`; tanpa itu Laravel menjawab 404 (host tak tepercaya) dan pemeriksaan tampak gagal.
 - Pindah ke VPS tanpa tunnel: sempitkan `trustProxies` ke IP proxy yang sah; jangan biarkan `*` pada origin yang terbuka ke internet.
 
 ### Pengaturan Cloudflare yang disarankan
 
 - SSL/TLS **Full (strict)**, **Always Use HTTPS** aktif, Automatic HTTPS Rewrites aktif, TLS minimum 1.2.
 - **HSTS**: aplikasi mengirim `Strict-Transport-Security` dengan `includeSubDomains`. Situs harus hidup di subdomainnya sendiri, atau seluruh domain apex dan subdomain lain sudah penuh HTTPS; jika tidak, subdomain HTTP lain tak terjangkau di browser yang pernah membuka situs ini.
-- **WAF/Rate limiting**: batasi `POST /daftar/*` dan `/admin/login` (mis. 20 permintaan per menit per IP lalu challenge/block); blokir path `/.env`, `/.git`, `/storage`, `/vendor` sebagai lapis tambahan. Aplikasi sudah punya pembatas laju sendiri (login admin 5 percobaan per menit per IP; pendaftaran 3 per menit per IP+sesi, 10 per menit dan 30 per jam per IP).
+- **WAF/Rate limiting**: batasi `POST /daftar/*`, seluruh `/admin*`, dan `POST /livewire*` (mis. 20 permintaan per menit per IP lalu challenge/block). Catatan: form login Filament tidak mengirim POST ke `/admin/login`, melainkan ke `/livewire-<hash>/update`, jadi aturan khusus `/admin/login` tidak efektif; pembatas laju aplikasi (5 percobaan per menit) tetap kontrol utama. Blokir path `/.env`, `/.git/`, `/vendor/`, `/storage/app/`, `/storage/logs/` sebagai lapis tambahan (jangan blokir `/storage/` seluruhnya: itu jalur gambar, galeri, dan PDF biaya). Aplikasi sudah punya pembatas laju sendiri (login admin 5 percobaan per menit per IP; pendaftaran 3 per menit per IP+sesi, 10 per menit dan 30 per jam per IP).
 - **Turnstile**: buat widget (Managed) untuk host publik; salin site key dan secret ke `.env`.
 - Bot Fight Mode boleh aktif; pastikan tidak menantang `/up` dan unduhan admin.
 
@@ -164,8 +185,9 @@ Rollback: `php artisan down`, kembalikan kode ke rilis sebelumnya (`git checkout
   ```
 
   atau `rsync -a --ignore-existing /www/wwwroot/pps/storage/app/backups/ user@host:/path/`. Arsip sudah bersandi, tetapi tetap simpan di tempat berakses terbatas.
-- Notifikasi surel mati bawaan. Isi `BACKUP_NOTIFICATION_EMAIL` dan `MAIL_*` untuk kabar gagal/tidak sehat; atau periksa `storage/logs` dan `php artisan backup:list` berkala.
-- Uji pemulihan minimal sekali sebelum go-live dan tiap kuartal.
+- **Sangat disarankan mengisi `BACKUP_NOTIFICATION_EMAIL`** (plus `MAIL_*` yang benar) atau peringatan lain. Notifikasi mati bawaan; tanpa itu cadangan malam yang gagal hanya tampak di `storage/logs` dan mudah tak terlihat. Cek manual: `php artisan backup:list`.
+- `backup:run` manual di production menolak berjalan bila `BACKUP_ARCHIVE_PASSWORD` kosong (arsip tidak boleh tanpa enkripsi).
+- Latihan pemulihan (restore drill) **tiap bulan**: pulihkan cadangan terbaru ke mesin lain (bagian 9), buka satu NIK dan satu KK. Cadangan yang belum pernah dipulihkan belum bisa dianggap ada.
 
 ## 9. Pemulihan (restore)
 
@@ -173,12 +195,13 @@ Prosedur (ditelaah di atas kertas; latih di mesin cadangan sebelum go-live):
 
 1. Siapkan server baru sesuai bagian 1-4 **tanpa** `key:generate` dan **tanpa** seed. Pasang kode yang sama.
 2. Isi `.env` dengan `APP_KEY` dan `NIK_HMAC_KEY` **yang sama persis** dengan server lama (dari penyimpanan kunci, bagian 10).
-3. Ekstrak arsip (butuh sandi AES; pakai `7z`, `unzip` lama tidak mendukung AES): `7z x -p"$BACKUP_ARCHIVE_PASSWORD" backup.zip -o/tmp/restore`. Isi: `db-dumps/*.sql` dan `storage/app/kk`, `storage/app/public` (path relatif terhadap folder proyek).
+3. Ekstrak arsip (butuh sandi AES; pakai `7z`, `unzip` lama tidak mendukung AES): `7z x backup.zip -o/tmp/restore` (7z menanyakan sandi; jangan menaruh sandi di baris perintah karena tersimpan di riwayat shell dan daftar proses). Isi: `db-dumps/*.sql` dan `storage/app/kk`, `storage/app/public` (path relatif terhadap folder proyek).
 4. Database: buat DB kosong lalu `mysql -u USER -p DBNAME < /tmp/restore/db-dumps/mysql-DBNAME.sql`.
 5. File: salin `storage/app/kk` dan `storage/app/public` hasil ekstraksi ke folder proyek, `chown -R www:www storage`, `php artisan storage:link`.
 6. `php artisan optimize:clear && php artisan optimize`, lalu masuk admin, buka satu pendaftar (NIK tampil) dan unduh satu KK untuk memastikan kunci benar.
 7. `php artisan pendaftaran:rehash-nik` **hanya bila** `NIK_HMAC_KEY` berbeda dari yang dipakai saat data dibuat (cek duplikat dan pencarian NIK akurat lagi). NIK tetap terbaca selama `APP_KEY` sama.
-8. Bila `APP_KEY` tidak ada: NIK dan KK **tidak dapat dipulihkan**; data lain (nama, alamat, dan seterusnya) tetap ada.
+8. Pemulihan di tempat (server yang sama, data rusak/salah): `php artisan down`, kosongkan database (`php artisan db:wipe --force` atau drop/create), impor dump (langkah 4), salin file (langkah 5), pastikan `APP_KEY` dan `NIK_HMAC_KEY` di `.env` tidak berubah, `php artisan optimize:clear && php artisan optimize`, lalu `php artisan up`.
+9. Bila `APP_KEY` tidak ada: NIK dan KK **tidak dapat dipulihkan**; data lain (nama, alamat, dan seterusnya) tetap ada.
 
 ## 10. Penyimpanan kunci (wajib dibaca)
 
