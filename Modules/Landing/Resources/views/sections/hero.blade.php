@@ -4,6 +4,8 @@
     $body = filled($section->body) ? $section->body : 'Kenali pondok kami, lalu daftarkan santri baru langsung dari website ini.';
     $image = $section->mediaUrl();
     $number = \Modules\Core\Support\WhatsAppLink::normalizeNumber($site->whatsapp_number ?? '');
+    // Tombol daftar hanya bila modul Pendaftaran aktif (mendaftarkan item navigasi 'pendaftaran').
+    $daftarPath = app(\Modules\Core\Support\Navigation::class)->path('pendaftaran');
 @endphp
 
 <section id="beranda" aria-labelledby="judul-hero" class="border-b border-ink-200 bg-primary-50">
@@ -13,7 +15,9 @@
             <h1 id="judul-hero" class="text-display max-w-[18ch] text-balance sm:max-w-[22ch]">{{ $title }}</h1>
             <p class="mt-5 max-w-prose text-lg/relaxed text-ink-600 sm:text-xl/relaxed">{{ $body }}</p>
             <div class="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
-                <x-button href="/daftar" size="lg">Daftar santri baru</x-button>
+                @if ($daftarPath)
+                    <x-button :href="$daftarPath" size="lg">Daftar santri baru</x-button>
+                @endif
                 @if ($number !== '')
                     <x-button variant="ghost" size="lg" :href="\Modules\Core\Support\WhatsAppLink::make($site->whatsapp_number, 'Assalamu\'alaikum, saya ingin bertanya tentang '.$site->site_name.'.')">Tanya lewat WhatsApp</x-button>
                 @endif

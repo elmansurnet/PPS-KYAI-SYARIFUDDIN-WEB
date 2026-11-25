@@ -302,3 +302,45 @@ test('clearing media_path deletes the old file', function () {
 
     Storage::disk('public')->assertMissing('landing/lama.jpg');
 });
+
+test('cta section offers the fee pdf download only when it is set', function () {
+    Storage::fake('public');
+    landingSection('ajakan_daftar', ['title' => null, 'body' => null]);
+
+    $this->get('/')->assertOk()->assertDontSee('Unduh rincian biaya (PDF)');
+
+    $settings = app(Modules\Core\Settings\SiteSettings::class);
+    $settings->fee_pdf_path = 'site/biaya-2027.pdf';
+    $settings->save();
+
+    $html = $this->get('/')->assertOk()->getContent();
+    $url = Storage::disk('public')->url('site/biaya-2027.pdf');
+    expect($html)->toMatch('~<a href="'.preg_quote(e($url), '~').'"[^>]*\sdownload[\s>=]~')
+        ->toContain('Unduh rincian biaya (PDF)')
+        ->toContain('Daftar sekarang')
+        ->not->toMatch('~<style\b|\sstyle\s*=~i');
+});
+
+test('registration and news links come from the navigation registry', function () {
+    landingSection('hero', ['title' => null, 'body' => null]);
+    landingSection('ajakan_daftar', ['title' => null, 'body' => null, 'sort_order' => 1]);
+    app()->instance(LatestNewsProvider::class, new class implements LatestNewsProvider
+    {
+        public function latest(int $limit): Collection
+        {
+            return collect([new NewsItem('Kabar', '/berita/kabar', now())]);
+        }
+    });
+
+    $html = $this->get('/')->assertOk()->getContent();
+    expect($html)->toContain('href="/daftar"')->toContain('Lihat semua berita')->toContain('href="/berita"');
+
+    app(Modules\Core\Support\Navigation::class)->remove('pendaftaran')->remove('berita');
+
+    $html = $this->get('/')->assertOk()->getContent();
+    expect($html)->not->toContain('href="/daftar"')
+        ->not->toContain('Daftar sekarang')
+        ->not->toContain('Daftar santri baru')
+        ->not->toContain('Lihat semua berita')
+        ->toContain('Berita terbaru');
+});

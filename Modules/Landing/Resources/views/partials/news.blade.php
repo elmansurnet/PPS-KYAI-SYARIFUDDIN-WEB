@@ -1,8 +1,12 @@
-{{-- Strip berita terbaru dari kontrak Core (Modules\Core\Support\NewsItem). Hanya dirender bila ada isi. --}}
+{{-- Strip berita terbaru dari kontrak Core (Modules\Core\Support\NewsItem). Hanya dirender bila ada isi.
+     Tautan daftar berita dari Navigation ('berita'); disembunyikan bila modul Berita tidak mendaftarkannya. --}}
+@php($beritaPath = app(\Modules\Core\Support\Navigation::class)->path('berita'))
 <section id="berita-terbaru" aria-labelledby="judul-berita" class="border-t border-ink-200 bg-ink-50 py-16 lg:py-24">
     <div class="container-site">
         <x-section-heading title="Berita terbaru" id="judul-berita">
-            <x-button href="/berita" variant="ghost">Lihat semua berita</x-button>
+            @if ($beritaPath)
+                <x-button :href="$beritaPath" variant="ghost">Lihat semua berita</x-button>
+            @endif
         </x-section-heading>
 
         <ul class="mt-10 grid gap-8 md:grid-cols-3">
