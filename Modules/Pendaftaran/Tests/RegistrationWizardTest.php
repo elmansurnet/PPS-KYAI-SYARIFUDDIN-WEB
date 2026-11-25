@@ -486,13 +486,52 @@ test('test_kk_rejects_file_over_limit', function () {
     expect(Applicant::count())->toBe(0);
 });
 
-test('default kk limit is 2 MB', function () {
-    expect(config('pendaftaran.kk_max_kb'))->toBe(2048);
+test('default kk limit is 5 MB', function () {
+    expect(config('pendaftaran.kk_max_kb'))->toBe(5120);
     wizTurnstile();
     wizFillSteps($this, $this->master);
 
-    wizSubmit($this, wizKk('kk.pdf', wizPdfBytes(2100 * 1024)))
-        ->assertSessionHasErrors(['kk' => 'Ukuran file KK maksimal 2 MB.']);
+    wizSubmit($this, wizKk('kk.pdf', wizPdfBytes(5200 * 1024)))
+        ->assertSessionHasErrors(['kk' => 'Ukuran file KK maksimal 5 MB.']);
+
+    expect(Applicant::count())->toBe(0);
+});
+
+test('a 4.9 MB phone photo or pdf of the kk is accepted, encrypted and readable', function (string $name, Closure $bytes) {
+    wizTurnstile();
+    wizFillSteps($this, $this->master);
+    $content = $bytes();
+    expect(strlen($content))->toBeGreaterThan(4800 * 1024)->toBeLessThan(5120 * 1024);
+
+    wizSubmit($this, wizKk($name, $content))->assertSessionHasNoErrors()->assertRedirect(route('daftar.selesai'));
+
+    $path = Applicant::sole()->kk_path;
+    expect(app(KkStorage::class)->contents($path))->toBe($content);
+})->with([
+    // JPEG sah dengan segmen komentar (COM) berukuran besar, seperti foto kamera beresolusi tinggi.
+    'jpeg' => ['kk.jpg', function () {
+        $jpeg = wizJpegBytes();
+        $comments = '';
+        for ($i = 0; $i < 76; $i++) {
+            $comments .= "\xFF\xFE".pack('n', 65000).str_repeat('k', 64998);
+        }
+
+        // Sisipkan setelah SOI + segmen APP0 JFIF (2 + 2 + panjang segmen), seperti EXIF besar pada foto kamera.
+        expect(substr($jpeg, 2, 2))->toBe("\xFF\xE0");
+        $app0 = 4 + unpack('n', substr($jpeg, 4, 2))[1];
+
+        return substr($jpeg, 0, $app0).$comments.substr($jpeg, $app0);
+    }],
+    'pdf' => ['kk.pdf', fn () => wizPdfBytes(4900 * 1024)],
+]);
+
+test('an upload rejected by php (too large for upload_max_filesize) shows an Indonesian message', function () {
+    wizTurnstile();
+    wizFillSteps($this, $this->master);
+
+    $file = new UploadedFile(wizKk()->getPathname(), 'kk.jpg', 'image/jpeg', UPLOAD_ERR_INI_SIZE, true);
+
+    wizSubmit($this, $file)->assertSessionHasErrors(['kk' => 'Unggahan file KK gagal. Pastikan ukuran file maksimal 5 MB lalu pilih ulang.']);
 });
 
 test('test_kk_is_stored_encrypted_and_not_publicly_reachable', function () {
@@ -759,15 +798,48 @@ test('kk upload failure after storing the file leaves no orphan file and no appl
 // Halaman terima kasih
 // ---------------------------------------------------------------------------------------------
 
-test('thank-you page requires the one-time flash', function () {
+test('thank-you page requires a recent registration and survives a reload within the window', function () {
     $this->get(route('daftar.selesai'))->assertRedirect(route('daftar'));
 
     wizTurnstile();
     wizFillSteps($this, $this->master);
     wizSubmit($this);
 
+    $this->get(route('daftar.selesai'))->assertOk()->assertSee('Lanjut ke WhatsApp');
+    // Muat ulang: tombol WhatsApp tetap ada.
+    $this->get(route('daftar.selesai'))->assertOk()->assertSee('Lanjut ke WhatsApp')->assertSee(WIZ_NAMA);
+
+    $this->travel(9)->minutes();
     $this->get(route('daftar.selesai'))->assertOk();
+
+    $this->travel(2)->minutes();
     $this->get(route('daftar.selesai'))->assertRedirect(route('daftar'));
+    expect(session()->has('pendaftaran.selesai'))->toBeFalse();
+});
+
+test('starting a new registration clears the thank-you data', function () {
+    wizTurnstile();
+    wizFillSteps($this, $this->master);
+    wizSubmit($this);
+    $this->get(route('daftar.selesai'))->assertOk();
+
+    $this->get(route('daftar'))->assertOk();
+
+    expect(session()->has('pendaftaran.selesai'))->toBeFalse();
+    $this->get(route('daftar.selesai'))->assertRedirect(route('daftar'));
+});
+
+test('thank-you session data holds only the name and last four nik digits, encrypted', function () {
+    wizTurnstile();
+    wizFillSteps($this, $this->master);
+    wizSubmit($this);
+
+    $raw = session('pendaftaran.selesai');
+    expect($raw)->toBeString()->not->toContain(WIZ_NAMA)->not->toContain(WIZ_NIK);
+
+    $data = json_decode(Illuminate\Support\Facades\Crypt::decryptString($raw), true);
+    expect(array_keys($data))->toBe(['nama', 'nik_akhir', 'sampai'])
+        ->and($data['nik_akhir'])->toBe('0001');
 });
 
 test('thank-you page without whatsapp number shows a neutral message', function () {

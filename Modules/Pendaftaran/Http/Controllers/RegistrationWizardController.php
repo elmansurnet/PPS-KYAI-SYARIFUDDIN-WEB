@@ -36,11 +36,17 @@ class RegistrationWizardController
 
     private const DONE_KEY = 'pendaftaran.selesai';
 
+    /** Halaman terima kasih (dengan tombol WhatsApp) tetap bisa dimuat ulang selama jendela ini. */
+    public const DONE_TTL_MINUTES = 10;
+
     /** @var array<int, class-string<WizardStepRequest>> */
     private const REQUESTS = [1 => SantriRequest::class, 2 => AkademikRequest::class, 3 => OrangTuaRequest::class];
 
     public function start(Request $request): View|RedirectResponse
     {
+        // Pendaftaran baru dimulai: data halaman terima kasih sebelumnya tidak diperlukan lagi.
+        $request->session()->forget(self::DONE_KEY);
+
         return $this->renderStep($request, 1);
     }
 
@@ -80,9 +86,7 @@ class RegistrationWizardController
         $draft = RegistrationDraft::for($request);
 
         // Klik ganda setelah berhasil: draf sudah dibersihkan, tampilkan lagi halaman terima kasih.
-        if ($draft->firstIncompleteBefore(4) !== null && $request->session()->has(self::DONE_KEY)) {
-            $request->session()->reflash();
-
+        if ($draft->firstIncompleteBefore(4) !== null && $this->doneData($request) !== null) {
             return redirect()->route('daftar.selesai', [], 303);
         }
 
@@ -119,9 +123,12 @@ class RegistrationWizardController
         }
 
         $draft->clear();
-        $request->session()->flash(self::DONE_KEY, Crypt::encryptString(json_encode([
+        // Bukan flash sekali pakai: halaman terima kasih boleh dimuat ulang selama DONE_TTL_MINUTES.
+        // Hanya nama dan 4 digit akhir NIK (tidak pernah NIK lengkap), terenkripsi.
+        $request->session()->put(self::DONE_KEY, Crypt::encryptString(json_encode([
             'nama' => $applicant->nama_lengkap,
             'nik_akhir' => $applicant->nikLast4(),
+            'sampai' => now()->addMinutes(self::DONE_TTL_MINUTES)->getTimestamp(),
         ], JSON_THROW_ON_ERROR)));
 
         return redirect()->route('daftar.selesai', [], 303);
@@ -168,7 +175,7 @@ class RegistrationWizardController
             4 => [
                 'review' => $this->review($draft),
                 'turnstileSiteKey' => KirimRequest::turnstileAvailable() ? (string) config('services.turnstile.site_key') : null,
-                'kkMaxKb' => (int) config('pendaftaran.kk_max_kb', 2048),
+                'kkMaxKb' => (int) config('pendaftaran.kk_max_kb', 5120),
             ],
         });
     }
@@ -220,7 +227,17 @@ class RegistrationWizardController
             $data = null;
         }
 
-        return is_array($data) && is_string($data['nama'] ?? null) && is_string($data['nik_akhir'] ?? null) ? $data : null;
+        $valid = is_array($data) && is_string($data['nama'] ?? null) && is_string($data['nik_akhir'] ?? null)
+            && is_int($data['sampai'] ?? null) && $data['sampai'] >= now()->getTimestamp();
+
+        if (! $valid) {
+            // Kedaluwarsa atau rusak: hapus agar data pribadi tidak tertinggal di sesi.
+            $request->session()->forget(self::DONE_KEY);
+
+            return null;
+        }
+
+        return $data;
     }
 
     /** Tautan WhatsApp panitia, atau null bila nomor belum diatur / tidak sah. Hanya https://wa.me/... */

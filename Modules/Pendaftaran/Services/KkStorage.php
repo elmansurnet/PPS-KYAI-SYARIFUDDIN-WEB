@@ -15,7 +15,7 @@ use RuntimeException;
  *
  * Format file (versi 1): Crypt::encryptString(json_encode({"v":1,"mime":"image/jpeg","data":"<base64>"})).
  * Enkripsi bawaan Laravel (AES-256-CBC + MAC, kunci APP_KEY): file yang diubah ditolak saat dibaca.
- * Seluruh file dienkripsi di memori; ukuran dibatasi config('pendaftaran.kk_max_kb') (bawaan 2 MB).
+ * Seluruh file dienkripsi di memori; ukuran dibatasi config('pendaftaran.kk_max_kb') (bawaan 5 MB).
  * Path yang dikembalikan relatif terhadap root disk, mis. "2026/11/01jd...xyz.kk"; nama dan ekstensi
  * asli dari pengguna tidak pernah dipakai.
  */
@@ -62,7 +62,7 @@ class KkStorage
 
     public static function maxBytes(): int
     {
-        return (int) config('pendaftaran.kk_max_kb', 2048) * 1024;
+        return (int) config('pendaftaran.kk_max_kb', 5120) * 1024;
     }
 
     /** @return array{mime: string, bytes: string} */

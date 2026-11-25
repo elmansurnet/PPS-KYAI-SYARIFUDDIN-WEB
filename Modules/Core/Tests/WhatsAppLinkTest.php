@@ -15,6 +15,10 @@ test('normalizeNumber handles common Indonesian formats', function (string $raw,
     'whitespace only' => ["  \t\n ", ''],
     'no digits' => ['abc', ''],
     'bare number without prefix' => ['8123456789', '628123456789'],
+    'international 00 prefix' => ['0062812 3456 789', '628123456789'],
+    'international 00 prefix with extra zero' => ['00620812-3456-789', '628123456789'],
+    'plus 62 with spaces' => ['+62 812 3456 789', '628123456789'],
+    'leading zero then 62 is a local area code (Aceh 062x)' => ['0627 123456', '62627123456'],
 ]);
 
 test('make builds a wa.me link with an encoded message', function () {

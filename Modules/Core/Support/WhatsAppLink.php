@@ -16,6 +16,13 @@ class WhatsAppLink
             return '';
         }
 
+        // Awalan panggilan internasional "00" (mis. "0062 812..."): buang sebelum memeriksa kode negara.
+        if (str_starts_with($digits, '0062')) {
+            $digits = substr($digits, 2);
+        }
+
+        // Catatan: "062..." TIDAK dianggap kode negara. Nol di depan adalah awalan trunk lokal dan kode
+        // area 062x memang ada (mis. 0627 Subulussalam, 0629 Kutacane), jadi "0627..." menjadi "62627...".
         if (str_starts_with($digits, '62')) {
             // "6208..." (62 + nol trunk yang ikut tertulis): buang nol ekstra.
             return '62'.ltrim(substr($digits, 2), '0');

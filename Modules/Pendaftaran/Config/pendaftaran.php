@@ -17,10 +17,12 @@ return [
     'usia_maks' => 30,
 
     /*
-     * Ukuran maksimum file kartu keluarga (kilobyte). File dienkripsi utuh di memori (sekitar 3x ukuran
-     * file selama proses), jadi jangan dinaikkan jauh di atas beberapa MB.
+     * Ukuran maksimum file kartu keluarga (kilobyte). 5 MB: foto KK dari kamera ponsel umumnya 2-5 MB.
+     * File dienkripsi utuh di memori (sekitar 3-4x ukuran file selama proses, kurang dari 25 MB untuk 5 MB),
+     * jadi jangan dinaikkan jauh di atas ini. upload_max_filesize dan post_max_size PHP harus di atasnya
+     * (8M, lihat docs/DEPLOY-aapanel.md).
      */
-    'kk_max_kb' => 2048,
+    'kk_max_kb' => 5120,
 
     /* Masa berlaku draf formulir di sesi (menit), diperpanjang setiap langkah disimpan. */
     'draft_ttl_minutes' => 120,

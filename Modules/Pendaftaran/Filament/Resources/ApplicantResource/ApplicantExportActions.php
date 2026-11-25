@@ -73,9 +73,10 @@ class ApplicantExportActions
         $count = (clone $query)->count();
         // Audit DULU (gagal tertutup): bila pencatatan gagal, ekspor batal sebelum file sementara xlsx berisi
         // data pribadi dibuat. File sementara dihapus maatwebsite setelah dikirim (deleteFileAfterSend).
-        AuditLog::record('pendaftaran.ekspor', null, ['format' => 'xlsx', 'count' => $count]);
+        $revealNik = self::revealsNik();
+        AuditLog::record('pendaftaran.ekspor', null, ['format' => 'xlsx', 'count' => $count, 'nik_lengkap' => $revealNik]);
 
-        return ApplicantsExport::fromQuery($query)->download(self::fileName('xlsx'));
+        return ApplicantsExport::fromQuery($query, $revealNik)->download(self::fileName('xlsx'));
     }
 
     /**
@@ -96,9 +97,10 @@ class ApplicantExportActions
             return null;
         }
 
-        AuditLog::record('pendaftaran.ekspor', null, ['format' => 'pdf', 'count' => $count]);
+        $revealNik = self::revealsNik();
+        AuditLog::record('pendaftaran.ekspor', null, ['format' => 'pdf', 'count' => $count, 'nik_lengkap' => $revealNik]);
 
-        $pdf = ApplicantsPdf::render($query, $filters);
+        $pdf = ApplicantsPdf::render($query, $filters, $revealNik);
 
         return response()->streamDownload(function () use ($pdf) {
             echo $pdf;
@@ -106,6 +108,12 @@ class ApplicantExportActions
             'Content-Type' => 'application/pdf',
             'Cache-Control' => 'private, no-store',
         ]);
+    }
+
+    /** Apakah ekspor memuat NIK lengkap (izin RevealNik). Dicatat di audit tanpa NIK itu sendiri. */
+    private static function revealsNik(): bool
+    {
+        return (bool) auth()->user()?->can('revealNik', Applicant::class);
     }
 
     private static function selected(Collection $records): Builder

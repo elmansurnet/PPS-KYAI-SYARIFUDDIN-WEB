@@ -67,7 +67,7 @@ class KkFileInspector
     }
 
     /**
-     * Buang isi "stream ... endstream" (biner acak bisa kebetulan memuat "/JS"). Tanpa regex agar aman untuk file 2 MB.
+     * Buang isi "stream ... endstream" (biner acak bisa kebetulan memuat "/JS"). Tanpa regex agar aman untuk file 5 MB.
      * Stream yang tak ditutup tidak dibuang (tetap dipindai).
      */
     private static function withoutStreamBodies(string $bytes): string

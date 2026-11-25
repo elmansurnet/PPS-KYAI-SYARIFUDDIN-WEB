@@ -1,6 +1,7 @@
 <?php
 
 use Filament\Http\Middleware\Authenticate as FilamentAuthenticate;
+use Filament\Http\Middleware\AuthenticateSession as FilamentAuthenticateSession;
 use Illuminate\Support\Facades\Route;
 use Modules\Pendaftaran\Http\Controllers\KkDownloadController;
 use Modules\Pendaftaran\Http\Controllers\RegistrationWizardController;
@@ -25,8 +26,9 @@ Route::middleware('cache.headers:no_store;private')->prefix('daftar')->group(fun
  * Unduh file KK untuk panitia/admin. Di luar route panel Filament tetapi memakai panel "admin" dan
  * middleware Authenticate Filament (tamu diarahkan ke login admin, akun tanpa role 403 lewat
  * canAccessPanel), lalu izin downloadKk (ApplicantPolicy). Hanya id angka (route model binding).
+ * AuthenticateSession sama seperti panel: setelah kata sandi diganti, sesi lama juga berakhir di sini.
  */
 Route::get('/admin/pendaftar/{applicant}/kk', KkDownloadController::class)
     ->whereNumber('applicant')
-    ->middleware(['panel:admin', FilamentAuthenticate::class, 'can:downloadKk,applicant'])
+    ->middleware(['panel:admin', FilamentAuthenticateSession::class, FilamentAuthenticate::class, 'can:downloadKk,applicant'])
     ->name('pendaftar.kk');

@@ -130,7 +130,7 @@ test('test_excel_export_respects_active_filters', function () {
         ->and($names)->not->toContain('Zaki Mubarak');
 
     $log = Activity::where('event', 'pendaftaran.ekspor')->sole();
-    expect($log->properties->toArray())->toBe(['format' => 'xlsx', 'count' => 32]);
+    expect($log->properties->toArray())->toBe(['format' => 'xlsx', 'count' => 32, 'nik_lengkap' => true]);
 });
 
 test('bulk excel export contains only the selected records', function () {
@@ -268,7 +268,7 @@ test('test_pdf_export_respects_active_filters', function () {
     expect(downloadedBinary($component))->toStartWith('%PDF-');
 
     $log = Activity::where('event', 'pendaftaran.ekspor')->sole();
-    expect($log->properties->toArray())->toBe(['format' => 'pdf', 'count' => 1]);
+    expect($log->properties->toArray())->toBe(['format' => 'pdf', 'count' => 1, 'nik_lengkap' => true]);
 
     // Isi PDF (HTML sumber) mengikuti query terfilter yang sama.
     $query = Applicant::query()->where('sudah_bayar', true)->where('nama_lengkap', 'like', '%Fauzan%');
@@ -334,8 +334,8 @@ test('test_export_with_zero_rows_returns_valid_file', function () {
 
     $logs = Activity::where('event', 'pendaftaran.ekspor')->orderBy('id')->get();
     expect($logs->map(fn ($l) => $l->properties->toArray())->all())->toBe([
-        ['format' => 'xlsx', 'count' => 0],
-        ['format' => 'pdf', 'count' => 0],
+        ['format' => 'xlsx', 'count' => 0, 'nik_lengkap' => true],
+        ['format' => 'pdf', 'count' => 0, 'nik_lengkap' => true],
     ]);
 });
 
@@ -357,7 +357,7 @@ test('test_viewing_and_exporting_applicants_creates_activity_log', function () {
         ->and($exports->pluck('causer_id')->unique()->all())->toBe([$user->id]);
 
     foreach ($exports as $log) {
-        expect(array_keys($log->properties->toArray()))->toBe(['format', 'count']);
+        expect(array_keys($log->properties->toArray()))->toBe(['format', 'count', 'nik_lengkap']);
     }
 
     $everything = Activity::all()->toJson();

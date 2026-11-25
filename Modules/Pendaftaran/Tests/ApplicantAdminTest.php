@@ -476,6 +476,23 @@ test('test_kk_download_is_decrypted_and_logged', function () {
         ->and($log->properties->toArray())->toBe([]);
 });
 
+test('kk download ends with the session after the password is changed elsewhere', function () {
+    $path = app(KkStorage::class)->store(UploadedFile::fake()->createWithContent('kk.png', kkPngBytes()));
+    $applicant = applicantRow();
+    $applicant->forceFill(['kk_path' => $path])->save();
+    $user = applicantActor('panitia_pendaftaran');
+
+    $route = app('router')->getRoutes()->getByName('pendaftar.kk');
+    expect($route->gatherMiddleware())->toContain(\Filament\Http\Middleware\AuthenticateSession::class);
+
+    $this->actingAs($user);
+    $this->get(route('pendaftar.kk', $applicant))->assertOk();
+
+    // Kata sandi diganti (mis. dari perangkat lain): sesi ini tidak berlaku lagi.
+    $user->forceFill(['password' => 'kata-sandi-baru-yang-panjang'])->save();
+    $this->get(route('pendaftar.kk', $applicant))->assertRedirect(Filament::getLoginUrl());
+});
+
 test('kk download: missing or unreadable file is a clean 404 and only numeric ids route', function () {
     $this->actingAs(applicantActor('panitia_pendaftaran'));
 

@@ -35,7 +35,7 @@ class KirimRequest extends FormRequest
         return [
             'kk' => [
                 'bail', 'required', 'file',
-                'max:'.(int) config('pendaftaran.kk_max_kb', 2048),
+                'max:'.(int) config('pendaftaran.kk_max_kb', 5120),
                 'extensions:'.implode(',', KkFileInspector::EXTENSIONS),
                 new KkFile,
                 'mimetypes:'.implode(',', KkFileInspector::MIMES),
@@ -46,12 +46,14 @@ class KirimRequest extends FormRequest
 
     public function messages(): array
     {
-        $kb = (int) config('pendaftaran.kk_max_kb', 2048);
+        $kb = (int) config('pendaftaran.kk_max_kb', 5120);
         $limit = $kb % 1024 === 0 ? ($kb / 1024).' MB' : $kb.' KB';
 
         return [
             'kk.required' => 'Pilih file foto atau PDF Kartu Keluarga.',
             'kk.file' => 'Unggahan file KK gagal. Pastikan ukuran file maksimal '.$limit.' lalu pilih ulang.',
+            // Berkas melebihi upload_max_filesize PHP atau unggahan terputus.
+            'kk.uploaded' => 'Unggahan file KK gagal. Pastikan ukuran file maksimal '.$limit.' lalu pilih ulang.',
             'kk.max' => 'Ukuran file KK maksimal '.$limit.'.',
             'kk.extensions' => 'File KK harus berupa foto JPG/PNG atau PDF.',
             'kk.mimetypes' => 'File KK harus berupa foto JPG/PNG atau PDF.',
